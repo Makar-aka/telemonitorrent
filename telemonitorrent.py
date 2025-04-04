@@ -17,6 +17,9 @@ CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
+USE_PROXY = os.getenv('USE_PROXY', 'False').lower() == 'true'
+HTTP_PROXY = os.getenv('HTTP_PROXY')
+HTTPS_PROXY = os.getenv('HTTPS_PROXY')
 
 # Настройка логирования
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -24,6 +27,12 @@ logger = logging.getLogger(__name__)
 
 # Путь к базе данных SQLite
 db_path = 'database.db'
+
+# Настройка прокси
+proxies = {
+    'http': HTTP_PROXY,
+    'https': HTTPS_PROXY
+} if USE_PROXY else None
 
 # Функция для инициализации базы данных
 def init_db():
@@ -85,7 +94,7 @@ def delete_page(page_id):
 
 # Функция для получения содержимого страницы
 def get_page_content(url):
-    response = requests.get(url)
+    response = requests.get(url, proxies=proxies)
     response.raise_for_status()
     return response.text
 
@@ -112,7 +121,7 @@ def get_page_title(url):
 
 # Функция для скачивания торрент-файла
 def download_torrent_file(url, file_path):
-    response = requests.get(url)
+    response = requests.get(url, proxies=proxies)
     response.raise_for_status()
     with open(file_path, 'wb') as file:
         file.write(response.content)
