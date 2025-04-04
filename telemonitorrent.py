@@ -45,6 +45,11 @@ def init_db():
                         url TEXT,
                         date TEXT,
                         last_checked TEXT)''')
+    # Добавление столбца last_checked, если он отсутствует
+    cursor.execute("PRAGMA table_info(pages)")
+    columns = [column[1] for column in cursor.fetchall()]
+    if 'last_checked' not in columns:
+        cursor.execute("ALTER TABLE pages ADD COLUMN last_checked TEXT")
     conn.commit()
     conn.close()
     logger.info("База данных инициализирована")
@@ -246,5 +251,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
