@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 from dotenv import load_dotenv
@@ -42,7 +43,8 @@ def init_db():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         title TEXT,
                         url TEXT,
-                        date TEXT)''')
+                        date TEXT,
+                        last_checked TEXT)''')
     conn.commit()
     conn.close()
     logger.info("База данных инициализирована")
@@ -60,7 +62,7 @@ def add_page(title, url):
 def get_pages():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("SELECT id, title, url, date FROM pages")
+    cursor.execute("SELECT id, title, url, date, last_checked FROM pages")
     pages = cursor.fetchall()
     conn.close()
     return pages
@@ -83,6 +85,16 @@ def update_page_date(page_id, new_date):
     conn.close()
     logger.info(f"Дата для страницы с ID {page_id} обновлена")
 
+# Функция для обновления времени последней проверки страницы в базе данных
+def update_last_checked(page_id):
+    last_checked = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE pages SET last_checked = ? WHERE id = ?", (last_checked, page_id))
+    conn.commit()
+    conn.close()
+    logger.info(f"Время последней проверки для страницы с ID {page_id} обновлено")
+
 # Функция для удаления страницы из базы данных
 def delete_page(page_id):
     conn = sqlite3.connect(db_path)
@@ -96,7 +108,7 @@ def delete_page(page_id):
 def check_pages():
     pages = get_pages()
     for page in pages:
-        page_id, title, url, old_date = page
+        page_id, title, url, old_date, _ = page
         page_content = rutracker_api.get_page_content(url)
         new_date = rutracker_api.parse_date(page_content)
         if new_date and new_date != old_date:
@@ -105,6 +117,7 @@ def check_pages():
             rutracker_api.download_torrent_file(torrent_url, torrent_file_path)
             update_page_date(page_id, new_date)
             logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан")
+        update_last_checked(page_id)
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
@@ -148,15 +161,16 @@ def button(update: Update, context: CallbackContext) -> None:
     if action == 'page':
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT url, date FROM pages WHERE id = ?", (page_id,))
+        cursor.execute("SELECT url, date, last_checked FROM pages WHERE id = ?", (page_id,))
         row = cursor.fetchone()
         conn.close()
         if row:
-            url, date = row
+            url, date, last_checked = row
             edit_date = rutracker_api.get_edit_date(url)
             keyboard = [
                 [InlineKeyboardButton("Update", callback_data=f"update_{page_id}"),
-                 InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}")]
+                 InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}"),
+                 InlineKeyboardButton(f"Обновить сейчас ({last_checked})", callback_data=f"refresh_{page_id}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
@@ -170,6 +184,19 @@ def button(update: Update, context: CallbackContext) -> None:
         delete_page(page_id)
         query.edit_message_text(text=f'Страница с ID {page_id} удалена')
         logger.info(f"Кнопка удаления для страницы с ID {page_id} нажата")
+
+    elif action == 'refresh':
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT url FROM pages WHERE id = ?", (page_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            url = row[0]
+            edit_date = rutracker_api.get_edit_date(url)
+            update_last_checked(page_id)
+            query.edit_message_text(text=f'Дата: {edit_date}')
+            logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
