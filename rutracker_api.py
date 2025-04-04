@@ -5,31 +5,31 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Настройка прокси
+# РќР°СЃС‚СЂРѕР№РєР° РїСЂРѕРєСЃРё
 proxies = None
 
 def set_proxies(proxy_settings):
     global proxies
     proxies = proxy_settings
 
-# Функция для получения содержимого страницы
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ СЃС‚СЂР°РЅРёС†С‹
 def get_page_content(url):
     response = requests.get(url, proxies=proxies)
     response.raise_for_status()
     return response.text
 
-# Функция для парсинга даты с страницы
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїР°СЂСЃРёРЅРіР° РґР°С‚С‹ СЃ СЃС‚СЂР°РЅРёС†С‹
 def parse_date(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
     date_span = soup.find('span', class_='posted_since hide-for-print')
     if date_span:
         date_text = date_span.text
-        match = re.search(r'ред\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
+        match = re.search(r'СЂРµРґ\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
         if match:
             return match.group(1)
     return None
 
-# Функция для получения заголовка страницы
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ Р·Р°РіРѕР»РѕРІРєР° СЃС‚СЂР°РЅРёС†С‹
 def get_page_title(url):
     page_content = get_page_content(url)
     soup = BeautifulSoup(page_content, 'html.parser')
@@ -39,10 +39,10 @@ def get_page_title(url):
         return title_text
     return 'No Title'
 
-# Функция для скачивания торрент-файла
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ С‚РѕСЂСЂРµРЅС‚-С„Р°Р№Р»Р°
 def download_torrent_file(url, file_path):
     response = requests.get(url, proxies=proxies)
     response.raise_for_status()
     with open(file_path, 'wb') as file:
         file.write(response.content)
-    logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
+    logger.info(f"РўРѕСЂСЂРµРЅС‚-С„Р°Р№Р» СЃРєР°С‡Р°РЅ Рё СЃРѕС…СЂР°РЅРµРЅ РІ {file_path}")
