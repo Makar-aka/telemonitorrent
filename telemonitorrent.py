@@ -11,14 +11,16 @@ import time
 from threading import Thread
 import logging
 
-# Настройка логирования
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
-
 # Загрузка переменных окружения из файла .env
 load_dotenv()
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
+LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
+LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
+
+# Настройка логирования
+logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
+logger = logging.getLogger(__name__)
 
 # Путь к базе данных SQLite
 db_path = 'database.db'
