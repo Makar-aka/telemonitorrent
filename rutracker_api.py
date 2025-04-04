@@ -46,3 +46,9 @@ def download_torrent_file(url, file_path):
     with open(file_path, 'wb') as file:
         file.write(response.content)
     logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
+
+# Функция для получения даты редактирования с страницы
+def get_edit_date(url):
+    page_content = get_page_content(url)
+    return parse_date(page_content)
+

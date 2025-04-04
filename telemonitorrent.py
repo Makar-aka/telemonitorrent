@@ -132,7 +132,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
         logger.info("Команда /list выполнена: нет страниц для мониторинга")
         return
 
-    keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
+    keyboard = [[InlineKeyboardButton(f"{page[1]} ({rutracker_api.get_edit_date(page[2])})", callback_data=f"page_{page[0]}")] for page in pages]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
     logger.info("Команда /list выполнена")
@@ -218,3 +218,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
