@@ -9,6 +9,11 @@ from dotenv import load_dotenv
 import schedule
 import time
 from threading import Thread
+import logging
+
+# Настройка логирования
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
@@ -29,6 +34,7 @@ def init_db():
                         date TEXT)''')
     conn.commit()
     conn.close()
+    logger.info("База данных инициализирована")
 
 # Функция для добавления страницы в базу данных
 def add_page(title, url):
@@ -37,6 +43,7 @@ def add_page(title, url):
     cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)", (title, url))
     conn.commit()
     conn.close()
+    logger.info(f"Страница {title} добавлена для мониторинга")
 
 # Функция для получения списка страниц из базы данных
 def get_pages():
@@ -54,6 +61,7 @@ def update_page_url(page_id, new_url):
     cursor.execute("UPDATE pages SET url = ? WHERE id = ?", (new_url, page_id))
     conn.commit()
     conn.close()
+    logger.info(f"Ссылка для страницы с ID {page_id} обновлена")
 
 # Функция для обновления даты страницы в базе данных
 def update_page_date(page_id, new_date):
@@ -62,6 +70,7 @@ def update_page_date(page_id, new_date):
     cursor.execute("UPDATE pages SET date = ? WHERE id = ?", (new_date, page_id))
     conn.commit()
     conn.close()
+    logger.info(f"Дата для страницы с ID {page_id} обновлена")
 
 # Функция для получения содержимого страницы
 def get_page_content(url):
@@ -86,6 +95,7 @@ def download_torrent_file(url, file_path):
     response.raise_for_status()
     with open(file_path, 'wb') as file:
         file.write(response.content)
+    logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
 
 # Функция для проверки изменений на страницах
 def check_pages():
@@ -99,33 +109,38 @@ def check_pages():
             torrent_file_path = f'torrents/{page_id}.torrent'  # Замените на путь к торрент-файлу
             download_torrent_file(torrent_url, torrent_file_path)
             update_page_date(page_id, new_date)
-            print(f"Дата для страницы {title} обновлена и торрент-файл скачан.")
+            logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан")
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Привет! Используйте /add <ссылка> для добавления страницы и /list для просмотра страниц.')
+    logger.info("Команда /start выполнена")
 
 # Обработчик команды /add
 def add(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 1:
         update.message.reply_text('Использование: /add <ссылка>')
+        logger.warning("Неправильное использование команды /add")
         return
 
     url = context.args[0]
     title = 'Title'  # Здесь можно добавить логику для получения заголовка страницы
     add_page(title, url)
     update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
+    logger.info(f"Команда /add выполнена для URL: {url}")
 
 # Обработчик команды /list
 def list_pages(update: Update, context: CallbackContext) -> None:
     pages = get_pages()
     if not pages:
         update.message.reply_text('Нет страниц для мониторинга.')
+        logger.info("Команда /list выполнена: нет страниц для мониторинга")
         return
 
     keyboard = [[InlineKeyboardButton(page[1], callback_data=str(page[0]))] for page in pages]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
+    logger.info("Команда /list выполнена")
 
 # Обработчик нажатий на кнопки
 def button(update: Update, context: CallbackContext) -> None:
@@ -133,17 +148,20 @@ def button(update: Update, context: CallbackContext) -> None:
     query.answer()
     page_id = int(query.data)
     query.edit_message_text(text=f'Вы выбрали страницу с ID {page_id}. Используйте /update <ссылка> для обновления.')
+    logger.info(f"Кнопка нажата для страницы с ID {page_id}")
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 2:
         update.message.reply_text('Использование: /update <ID> <ссылка>')
+        logger.warning("Неправильное использование команды /update")
         return
 
     page_id = int(context.args[0])
     new_url = context.args[1]
     update_page_url(page_id, new_url)
     update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.')
+    logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
 
 def main() -> None:
     # Инициализация базы данных
