@@ -8,17 +8,19 @@ import schedule
 import time
 from threading import Thread
 import logging
-import rutracker_api
+from rutracker_api import RutrackerAPI
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
+LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levellevel)s - %(message)s')
 USE_PROXY = os.getenv('USE_PROXY', 'False').lower() == 'true'
 HTTP_PROXY = os.getenv('HTTP_PROXY')
 HTTPS_PROXY = os.getenv('HTTPS_PROXY')
+RUTRACKER_USERNAME = os.getenv('RUTRACKER_USERNAME')
+RUTRACKER_PASSWORD = os.getenv('RUTRACKER_PASSWORD')
 
 # Настройка логирования
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -27,13 +29,8 @@ logger = logging.getLogger(__name__)
 # Путь к базе данных SQLite
 db_path = 'database.db'
 
-# Настройка прокси
-proxies = {
-    'http': HTTP_PROXY,
-    'https': HTTPS_PROXY
-} if USE_PROXY else None
-
-rutracker_api.set_proxies(proxies)
+# Инициализация RutrackerAPI
+rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
 
 # Функция для инициализации базы данных
 def init_db():
@@ -251,6 +248,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 

@@ -1,54 +1,105 @@
+import os
 import requests
-from bs4 import BeautifulSoup
 import re
 import logging
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
-# Настройка прокси
-proxies = None
+class RutrackerAPI:
+    def __init__(self, username, password):
+        self.username = username
+        self.password = password
+        self.session = requests.Session()
+        self.base_url = "https://rutracker.org/forum/"
+        self.logged_in = False
+        self.proxies = self.setup_proxies()
 
-def set_proxies(proxy_settings):
-    global proxies
-    proxies = proxy_settings
+    def setup_proxies(self):
+        if os.getenv('USE_PROXY', 'false').lower() == 'true':
+            proxies = {
+                "http": os.getenv('HTTP_PROXY'),
+                "https": os.getenv('HTTPS_PROXY')
+            }
+            if not all(proxies.values()):
+                logger.error("Не настроены прокси-серверы")
+                return None
+            if not all(self.validate_proxy(proxy) for proxy in proxies.values()):
+                logger.error("Некорректные настройки прокси")
+                return None
+            return proxies
+        return None
 
-# Функция для получения содержимого страницы
-def get_page_content(url):
-    response = requests.get(url, proxies=proxies)
-    response.raise_for_status()
-    return response.text
+    def validate_proxy(self, proxy_url):
+        try:
+            requests.get("http://httpbin.org/ip", proxies={"http": proxy_url}, timeout=5)
+            return True
+        except Exception as e:
+            logger.error(f"Ошибка при проверке прокси {proxy_url}: {e}")
+            return False
 
-# Функция для парсинга даты с страницы
-def parse_date(page_content):
-    soup = BeautifulSoup(page_content, 'html.parser')
-    date_span = soup.find('span', class_='posted_since hide-for-print')
-    if date_span:
-        date_text = date_span.text
-        match = re.search(r'ред\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
-        if match:
-            return match.group(1)
-    return None
+    def make_request(self, method, endpoint, **kwargs):
+        url = self.base_url + endpoint
+        return self.session.request(method, url, proxies=self.proxies, **kwargs)
 
-# Функция для получения заголовка страницы
-def get_page_title(url):
-    page_content = get_page_content(url)
-    soup = BeautifulSoup(page_content, 'html.parser')
-    title_tag = soup.find('title')
-    if title_tag:
-        title_text = title_tag.text.split('/')[0].strip()
-        return title_text
-    return 'No Title'
+    def login(self):
+        if self.logged_in:
+            return True
 
-# Функция для скачивания торрент-файла
-def download_torrent_file(url, file_path):
-    response = requests.get(url, proxies=proxies)
-    response.raise_for_status()
-    with open(file_path, 'wb') as file:
-        file.write(response.content)
-    logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
+        login_url = self.base_url + "login.php"
+        payload = {
+            "login_username": self.username,
+            "login_password": self.password,
+            "login": "вход"
+        }
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-# Функция для получения даты редактирования с страницы
-def get_edit_date(url):
-    page_content = get_page_content(url)
-    return parse_date(page_content)
+        try:
+            response = self.session.post(login_url, data=payload, headers=headers, proxies=self.proxies)
+            self.logged_in = "logged-in" in response.text or "logout" in response.text
+            return self.logged_in
+        except Exception as e:
+            logger.error(f"Ошибка при авторизации: {e}")
+            return False
+
+    def get_page_content(self, url):
+        if not self.login():
+            return None
+        response = self.session.get(url, proxies=self.proxies)
+        response.raise_for_status()
+        return response.text
+
+    def parse_date(self, page_content):
+        soup = BeautifulSoup(page_content, 'html.parser')
+        date_span = soup.find('span', class_='posted_since hide-for-print')
+        if date_span:
+            date_text = date_span.text
+            match = re.search(r'ред\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
+            if match:
+                return match.group(1)
+        return None
+
+    def get_page_title(self, url):
+        page_content = self.get_page_content(url)
+        if page_content:
+            soup = BeautifulSoup(page_content, 'html.parser')
+            title_tag = soup.find('title')
+            if title_tag:
+                title_text = title_tag.text.split('/')[0].strip()
+                return title_text
+        return 'No Title'
+
+    def download_torrent_file(self, url, file_path):
+        if not self.login():
+            return None
+        response = self.session.get(url, proxies=self.proxies)
+        response.raise_for_status()
+        with open(file_path, 'wb') as file:
+            file.write(response.content)
+        logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
+
+    def get_edit_date(self, url):
+        page_content = self.get_page_content(url)
+        return self.parse_date(page_content)
+
 
