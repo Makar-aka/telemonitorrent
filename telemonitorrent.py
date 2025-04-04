@@ -10,15 +10,15 @@ import schedule
 import time
 from threading import Thread
 
-# Загрузка переменных окружения из файла .env
+# Р—Р°РіСЂСѓР·РєР° РїРµСЂРµРјРµРЅРЅС‹С… РѕРєСЂСѓР¶РµРЅРёСЏ РёР· С„Р°Р№Р»Р° .env
 load_dotenv()
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
-# Путь к базе данных SQLite
+# РџСѓС‚СЊ Рє Р±Р°Р·Рµ РґР°РЅРЅС‹С… SQLite
 db_path = 'database.db'
 
-# Функция для инициализации базы данных
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РёРЅРёС†РёР°Р»РёР·Р°С†РёРё Р±Р°Р·С‹ РґР°РЅРЅС‹С…
 def init_db():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -30,7 +30,7 @@ def init_db():
     conn.commit()
     conn.close()
 
-# Функция для добавления страницы в базу данных
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РґРѕР±Р°РІР»РµРЅРёСЏ СЃС‚СЂР°РЅРёС†С‹ РІ Р±Р°Р·Сѓ РґР°РЅРЅС‹С…
 def add_page(title, url):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -38,7 +38,7 @@ def add_page(title, url):
     conn.commit()
     conn.close()
 
-# Функция для получения списка страниц из базы данных
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ СЃРїРёСЃРєР° СЃС‚СЂР°РЅРёС† РёР· Р±Р°Р·С‹ РґР°РЅРЅС‹С…
 def get_pages():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -47,7 +47,7 @@ def get_pages():
     conn.close()
     return pages
 
-# Функция для обновления ссылки страницы в базе данных
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ СЃСЃС‹Р»РєРё СЃС‚СЂР°РЅРёС†С‹ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…
 def update_page_url(page_id, new_url):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -55,7 +55,7 @@ def update_page_url(page_id, new_url):
     conn.commit()
     conn.close()
 
-# Функция для обновления даты страницы в базе данных
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ РґР°С‚С‹ СЃС‚СЂР°РЅРёС†С‹ РІ Р±Р°Р·Рµ РґР°РЅРЅС‹С…
 def update_page_date(page_id, new_date):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -63,31 +63,31 @@ def update_page_date(page_id, new_date):
     conn.commit()
     conn.close()
 
-# Функция для получения содержимого страницы
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ СЃРѕРґРµСЂР¶РёРјРѕРіРѕ СЃС‚СЂР°РЅРёС†С‹
 def get_page_content(url):
     response = requests.get(url)
     response.raise_for_status()
     return response.text
 
-# Функция для парсинга даты с страницы
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїР°СЂСЃРёРЅРіР° РґР°С‚С‹ СЃ СЃС‚СЂР°РЅРёС†С‹
 def parse_date(page_content):
     soup = BeautifulSoup(page_content, 'html.parser')
     date_span = soup.find('span', class_='posted_since hide-for-print')
     if date_span:
         date_text = date_span.text
-        match = re.search(r'ред\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
+        match = re.search(r'СЂРµРґ\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
         if match:
             return match.group(1)
     return None
 
-# Функция для скачивания торрент-файла
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ СЃРєР°С‡РёРІР°РЅРёСЏ С‚РѕСЂСЂРµРЅС‚-С„Р°Р№Р»Р°
 def download_torrent_file(url, file_path):
     response = requests.get(url)
     response.raise_for_status()
     with open(file_path, 'wb') as file:
         file.write(response.content)
 
-# Функция для проверки изменений на страницах
+# Р¤СѓРЅРєС†РёСЏ РґР»СЏ РїСЂРѕРІРµСЂРєРё РёР·РјРµРЅРµРЅРёР№ РЅР° СЃС‚СЂР°РЅРёС†Р°С…
 def check_pages():
     pages = get_pages()
     for page in pages:
@@ -95,74 +95,74 @@ def check_pages():
         page_content = get_page_content(url)
         new_date = parse_date(page_content)
         if new_date and new_date != old_date:
-            torrent_url = 'URL_ТОРРЕНТ_ФАЙЛА'  # Замените на URL торрент-файла
-            torrent_file_path = f'torrents/{page_id}.torrent'  # Замените на путь к торрент-файлу
+            torrent_url = 'URL_РўРћР Р Р•РќРў_Р¤РђР™Р›Рђ'  # Р—Р°РјРµРЅРёС‚Рµ РЅР° URL С‚РѕСЂСЂРµРЅС‚-С„Р°Р№Р»Р°
+            torrent_file_path = f'torrents/{page_id}.torrent'  # Р—Р°РјРµРЅРёС‚Рµ РЅР° РїСѓС‚СЊ Рє С‚РѕСЂСЂРµРЅС‚-С„Р°Р№Р»Сѓ
             download_torrent_file(torrent_url, torrent_file_path)
             update_page_date(page_id, new_date)
-            print(f"Дата для страницы {title} обновлена и торрент-файл скачан.")
+            print(f"Р”Р°С‚Р° РґР»СЏ СЃС‚СЂР°РЅРёС†С‹ {title} РѕР±РЅРѕРІР»РµРЅР° Рё С‚РѕСЂСЂРµРЅС‚-С„Р°Р№Р» СЃРєР°С‡Р°РЅ.")
 
-# Обработчик команды /start
+# РћР±СЂР°Р±РѕС‚С‡РёРє РєРѕРјР°РЅРґС‹ /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Используйте /add <ссылка> для добавления страницы и /list для просмотра страниц.')
+    update.message.reply_text('РџСЂРёРІРµС‚! РСЃРїРѕР»СЊР·СѓР№С‚Рµ /add <СЃСЃС‹Р»РєР°> РґР»СЏ РґРѕР±Р°РІР»РµРЅРёСЏ СЃС‚СЂР°РЅРёС†С‹ Рё /list РґР»СЏ РїСЂРѕСЃРјРѕС‚СЂР° СЃС‚СЂР°РЅРёС†.')
 
-# Обработчик команды /add
+# РћР±СЂР°Р±РѕС‚С‡РёРє РєРѕРјР°РЅРґС‹ /add
 def add(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 1:
-        update.message.reply_text('Использование: /add <ссылка>')
+        update.message.reply_text('РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /add <СЃСЃС‹Р»РєР°>')
         return
 
     url = context.args[0]
-    title = 'Title'  # Здесь можно добавить логику для получения заголовка страницы
+    title = 'Title'  # Р—РґРµСЃСЊ РјРѕР¶РЅРѕ РґРѕР±Р°РІРёС‚СЊ Р»РѕРіРёРєСѓ РґР»СЏ РїРѕР»СѓС‡РµРЅРёСЏ Р·Р°РіРѕР»РѕРІРєР° СЃС‚СЂР°РЅРёС†С‹
     add_page(title, url)
-    update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
+    update.message.reply_text(f'РЎС‚СЂР°РЅРёС†Р° {title} РґРѕР±Р°РІР»РµРЅР° РґР»СЏ РјРѕРЅРёС‚РѕСЂРёРЅРіР°.')
 
-# Обработчик команды /list
+# РћР±СЂР°Р±РѕС‚С‡РёРє РєРѕРјР°РЅРґС‹ /list
 def list_pages(update: Update, context: CallbackContext) -> None:
     pages = get_pages()
     if not pages:
-        update.message.reply_text('Нет страниц для мониторинга.')
+        update.message.reply_text('РќРµС‚ СЃС‚СЂР°РЅРёС† РґР»СЏ РјРѕРЅРёС‚РѕСЂРёРЅРіР°.')
         return
 
     keyboard = [[InlineKeyboardButton(page[1], callback_data=str(page[0]))] for page in pages]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
+    update.message.reply_text('РЎС‚СЂР°РЅРёС†С‹ РґР»СЏ РјРѕРЅРёС‚РѕСЂРёРЅРіР°:', reply_markup=reply_markup)
 
-# Обработчик нажатий на кнопки
+# РћР±СЂР°Р±РѕС‚С‡РёРє РЅР°Р¶Р°С‚РёР№ РЅР° РєРЅРѕРїРєРё
 def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
     page_id = int(query.data)
-    query.edit_message_text(text=f'Вы выбрали страницу с ID {page_id}. Используйте /update <ссылка> для обновления.')
+    query.edit_message_text(text=f'Р’С‹ РІС‹Р±СЂР°Р»Рё СЃС‚СЂР°РЅРёС†Сѓ СЃ ID {page_id}. РСЃРїРѕР»СЊР·СѓР№С‚Рµ /update <СЃСЃС‹Р»РєР°> РґР»СЏ РѕР±РЅРѕРІР»РµРЅРёСЏ.')
 
-# Обработчик команды /update
+# РћР±СЂР°Р±РѕС‚С‡РёРє РєРѕРјР°РЅРґС‹ /update
 def update_page(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 2:
-        update.message.reply_text('Использование: /update <ID> <ссылка>')
+        update.message.reply_text('РСЃРїРѕР»СЊР·РѕРІР°РЅРёРµ: /update <ID> <СЃСЃС‹Р»РєР°>')
         return
 
     page_id = int(context.args[0])
     new_url = context.args[1]
     update_page_url(page_id, new_url)
-    update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.')
+    update.message.reply_text(f'РЎСЃС‹Р»РєР° РґР»СЏ СЃС‚СЂР°РЅРёС†С‹ СЃ ID {page_id} РѕР±РЅРѕРІР»РµРЅР°.')
 
 def main() -> None:
-    # Инициализация базы данных
+    # РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ Р±Р°Р·С‹ РґР°РЅРЅС‹С…
     init_db()
 
-    # Создание объекта Updater и передача ему токена вашего бота
+    # РЎРѕР·РґР°РЅРёРµ РѕР±СЉРµРєС‚Р° Updater Рё РїРµСЂРµРґР°С‡Р° РµРјСѓ С‚РѕРєРµРЅР° РІР°С€РµРіРѕ Р±РѕС‚Р°
     updater = Updater(BOT_TOKEN)
 
-    # Получение диспетчера для регистрации обработчиков
+    # РџРѕР»СѓС‡РµРЅРёРµ РґРёСЃРїРµС‚С‡РµСЂР° РґР»СЏ СЂРµРіРёСЃС‚СЂР°С†РёРё РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ
     dispatcher = updater.dispatcher
 
-    # Регистрация обработчиков команд
+    # Р РµРіРёСЃС‚СЂР°С†РёСЏ РѕР±СЂР°Р±РѕС‚С‡РёРєРѕРІ РєРѕРјР°РЅРґ
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("add", add))
     dispatcher.add_handler(CommandHandler("list", list_pages))
     dispatcher.add_handler(CommandHandler("update", update_page))
     dispatcher.add_handler(CallbackQueryHandler(button))
 
-    # Запуск планировщика задач
+    # Р—Р°РїСѓСЃРє РїР»Р°РЅРёСЂРѕРІС‰РёРєР° Р·Р°РґР°С‡
     schedule.every(CHECK_INTERVAL).minutes.do(check_pages)
 
     def run_schedule():
@@ -170,11 +170,11 @@ def main() -> None:
             schedule.run_pending()
             time.sleep(1)
 
-    # Запуск планировщика в отдельном потоке
+    # Р—Р°РїСѓСЃРє РїР»Р°РЅРёСЂРѕРІС‰РёРєР° РІ РѕС‚РґРµР»СЊРЅРѕРј РїРѕС‚РѕРєРµ
     schedule_thread = Thread(target=run_schedule)
     schedule_thread.start()
 
-    # Запуск бота
+    # Р—Р°РїСѓСЃРє Р±РѕС‚Р°
     updater.start_polling()
     updater.idle()
 
