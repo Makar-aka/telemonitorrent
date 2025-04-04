@@ -1,8 +1,5 @@
 import os
 import sqlite3
-import requests
-from bs4 import BeautifulSoup
-import re
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
 from dotenv import load_dotenv
@@ -10,6 +7,7 @@ import schedule
 import time
 from threading import Thread
 import logging
+import rutracker_api
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
@@ -33,6 +31,8 @@ proxies = {
     'http': HTTP_PROXY,
     'https': HTTPS_PROXY
 } if USE_PROXY else None
+
+rutracker_api.set_proxies(proxies)
 
 # Функция для инициализации базы данных
 def init_db():
@@ -92,52 +92,17 @@ def delete_page(page_id):
     conn.close()
     logger.info(f"Страница с ID {page_id} удалена")
 
-# Функция для получения содержимого страницы
-def get_page_content(url):
-    response = requests.get(url, proxies=proxies)
-    response.raise_for_status()
-    return response.text
-
-# Функция для парсинга даты с страницы
-def parse_date(page_content):
-    soup = BeautifulSoup(page_content, 'html.parser')
-    date_span = soup.find('span', class_='posted_since hide-for-print')
-    if date_span:
-        date_text = date_span.text
-        match = re.search(r'ред\. (\d{2}-\w{3}-\d{2} \d{2}:\d{2})', date_text)
-        if match:
-            return match.group(1)
-    return None
-
-# Функция для получения заголовка страницы
-def get_page_title(url):
-    page_content = get_page_content(url)
-    soup = BeautifulSoup(page_content, 'html.parser')
-    title_tag = soup.find('title')
-    if title_tag:
-        title_text = title_tag.text.split('/')[0].strip()
-        return title_text
-    return 'No Title'
-
-# Функция для скачивания торрент-файла
-def download_torrent_file(url, file_path):
-    response = requests.get(url, proxies=proxies)
-    response.raise_for_status()
-    with open(file_path, 'wb') as file:
-        file.write(response.content)
-    logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
-
 # Функция для проверки изменений на страницах
 def check_pages():
     pages = get_pages()
     for page in pages:
         page_id, title, url, old_date = page
-        page_content = get_page_content(url)
-        new_date = parse_date(page_content)
+        page_content = rutracker_api.get_page_content(url)
+        new_date = rutracker_api.parse_date(page_content)
         if new_date and new_date != old_date:
             torrent_url = 'URL_ТОРРЕНТ_ФАЙЛА'  # Замените на URL торрент-файла
             torrent_file_path = f'torrents/{page_id}.torrent'  # Замените на путь к торрент-файлу
-            download_torrent_file(torrent_url, torrent_file_path)
+            rutracker_api.download_torrent_file(torrent_url, torrent_file_path)
             update_page_date(page_id, new_date)
             logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан")
 
@@ -154,7 +119,7 @@ def add(update: Update, context: CallbackContext) -> None:
         return
 
     url = context.args[0]
-    title = get_page_title(url)
+    title = rutracker_api.get_page_title(url)
     add_page(title, url)
     update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
     logger.info(f"Команда /add выполнена для URL: {url}")
