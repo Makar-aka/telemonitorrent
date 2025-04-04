@@ -74,6 +74,15 @@ def update_page_date(page_id, new_date):
     conn.close()
     logger.info(f"Дата для страницы с ID {page_id} обновлена")
 
+# Функция для удаления страницы из базы данных
+def delete_page(page_id):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM pages WHERE id = ?", (page_id,))
+    conn.commit()
+    conn.close()
+    logger.info(f"Страница с ID {page_id} удалена")
+
 # Функция для получения содержимого страницы
 def get_page_content(url):
     response = requests.get(url)
@@ -90,6 +99,16 @@ def parse_date(page_content):
         if match:
             return match.group(1)
     return None
+
+# Функция для получения заголовка страницы
+def get_page_title(url):
+    page_content = get_page_content(url)
+    soup = BeautifulSoup(page_content, 'html.parser')
+    title_tag = soup.find('title')
+    if title_tag:
+        title_text = title_tag.text.split('/')[0].strip()
+        return title_text
+    return 'No Title'
 
 # Функция для скачивания торрент-файла
 def download_torrent_file(url, file_path):
@@ -126,7 +145,7 @@ def add(update: Update, context: CallbackContext) -> None:
         return
 
     url = context.args[0]
-    title = 'Title'  # Здесь можно добавить логику для получения заголовка страницы
+    title = get_page_title(url)
     add_page(title, url)
     update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
     logger.info(f"Команда /add выполнена для URL: {url}")
@@ -139,7 +158,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
         logger.info("Команда /list выполнена: нет страниц для мониторинга")
         return
 
-    keyboard = [[InlineKeyboardButton(page[1], callback_data=str(page[0]))] for page in pages]
+    keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
     logger.info("Команда /list выполнена")
@@ -148,9 +167,34 @@ def list_pages(update: Update, context: CallbackContext) -> None:
 def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
-    page_id = int(query.data)
-    query.edit_message_text(text=f'Вы выбрали страницу с ID {page_id}. Используйте /update <ссылка> для обновления.')
-    logger.info(f"Кнопка нажата для страницы с ID {page_id}")
+    data = query.data.split('_')
+    action = data[0]
+    page_id = int(data[1])
+
+    if action == 'page':
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT date FROM pages WHERE id = ?", (page_id,))
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            date = row[0]
+            keyboard = [
+                [InlineKeyboardButton("Update", callback_data=f"update_{page_id}"),
+                 InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(text=f'Дата: {date}', reply_markup=reply_markup)
+            logger.info(f"Кнопка страницы с ID {page_id} нажата, дата: {date}")
+
+    elif action == 'update':
+        query.edit_message_text(text=f'Введите новую ссылку для страницы с ID {page_id} с помощью команды /update {page_id} <ссылка>')
+        logger.info(f"Кнопка обновления для страницы с ID {page_id} нажата")
+
+    elif action == 'delete':
+        delete_page(page_id)
+        query.edit_message_text(text=f'Страница с ID {page_id} удалена')
+        logger.info(f"Кнопка удаления для страницы с ID {page_id} нажата")
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
