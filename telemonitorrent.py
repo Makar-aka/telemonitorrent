@@ -15,7 +15,7 @@ load_dotenv()
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levellevel)s - %(message)s')
+LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
 USE_PROXY = os.getenv('USE_PROXY', 'False').lower() == 'true'
 HTTP_PROXY = os.getenv('HTTP_PROXY')
 HTTPS_PROXY = os.getenv('HTTPS_PROXY')
@@ -172,7 +172,8 @@ def button(update: Update, context: CallbackContext) -> None:
             keyboard = [
                 [InlineKeyboardButton("Update", callback_data=f"update_{page_id}"),
                  InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}"),
-                 InlineKeyboardButton(f"Обновить сейчас ({last_checked})", callback_data=f"refresh_{page_id}")]
+                 InlineKeyboardButton(f"Обновить сейчас ({last_checked})", callback_data=f"refresh_{page_id}"),
+                 InlineKeyboardButton("Раздача", url=url)]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
@@ -197,8 +198,13 @@ def button(update: Update, context: CallbackContext) -> None:
             url = row[0]
             edit_date = rutracker_api.get_edit_date(url)
             update_last_checked(page_id)
-            query.edit_message_text(text=f'Дата: {edit_date}')
+            keyboard = [[InlineKeyboardButton("Назад", callback_data="back_to_list")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
+
+    elif action == 'back_to_list':
+        list_pages(query, context)
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
@@ -248,6 +254,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
