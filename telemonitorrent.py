@@ -132,7 +132,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
         logger.info("Команда /list выполнена: нет страниц для мониторинга")
         return
 
-    keyboard = [[InlineKeyboardButton(f"{page[1]} ({rutracker_api.get_edit_date(page[2])})", callback_data=f"page_{page[0]}")] for page in pages]
+    keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
     logger.info("Команда /list выполнена")
@@ -148,18 +148,19 @@ def button(update: Update, context: CallbackContext) -> None:
     if action == 'page':
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
-        cursor.execute("SELECT date FROM pages WHERE id = ?", (page_id,))
+        cursor.execute("SELECT url, date FROM pages WHERE id = ?", (page_id,))
         row = cursor.fetchone()
         conn.close()
         if row:
-            date = row[0]
+            url, date = row
+            edit_date = rutracker_api.get_edit_date(url)
             keyboard = [
                 [InlineKeyboardButton("Update", callback_data=f"update_{page_id}"),
                  InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            query.edit_message_text(text=f'Дата: {date}', reply_markup=reply_markup)
-            logger.info(f"Кнопка страницы с ID {page_id} нажата, дата: {date}")
+            query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
+            logger.info(f"Кнопка страницы с ID {page_id} нажата, дата: {edit_date}")
 
     elif action == 'update':
         query.edit_message_text(text=f'Введите новую ссылку для страницы с ID {page_id} с помощью команды /update {page_id} <ссылка>')
@@ -218,4 +219,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
