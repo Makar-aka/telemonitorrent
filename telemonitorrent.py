@@ -169,9 +169,9 @@ def button(update: Update, context: CallbackContext) -> None:
     query.answer()
     data = query.data.split('_')
     action = data[0]
-    page_id = int(data[1])
 
     if action == 'page':
+        page_id = int(data[1])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT url, date, last_checked FROM pages WHERE id = ?", (page_id,))
@@ -191,11 +191,13 @@ def button(update: Update, context: CallbackContext) -> None:
             logger.info(f"Кнопка страницы с ID {page_id} нажата, дата: {edit_date}")
 
     elif action == 'delete':
+        page_id = int(data[1])
         delete_page(page_id)
         query.edit_message_text(text=f'Страница с ID {page_id} удалена')
         logger.info(f"Кнопка удаления для страницы с ID {page_id} нажата")
 
     elif action == 'refresh':
+        page_id = int(data[1])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT url FROM pages WHERE id = ?", (page_id,))
@@ -261,6 +263,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
