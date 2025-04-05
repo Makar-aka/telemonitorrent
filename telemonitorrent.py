@@ -800,6 +800,7 @@ def user_help_cmd(update: Update, context: CallbackContext) -> None:
     
     update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='HTML')
     logger.info("Отображен список команд пользователя")
+
 # Обработчик нажатий на кнопки
 @restricted
 def button(update: Update, context: CallbackContext) -> None:
@@ -975,6 +976,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("update", update_page_cmd))
     dispatcher.add_handler(CommandHandler("check", check_now))
     dispatcher.add_handler(CommandHandler("help", user_help_cmd))
+    
     # Команды для управления подписками
     dispatcher.add_handler(CommandHandler("subscribe", toggle_subscription))
     dispatcher.add_handler(CommandHandler("status", subscription_status))
