@@ -36,15 +36,15 @@ if not os.path.exists(LOG_FILE):
 
 # Настройка логирования
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 # Создание обработчиков
 file_handler = logging.FileHandler(LOG_FILE)
-file_handler.setLevel(logging.INFO)
+file_handler.setLevel(logging.DEBUG)
 file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
 
 stream_handler = logging.StreamHandler()
-stream_handler.setLevel(logging.INFO)
+stream_handler.setLevel(logging.DEBUG)
 stream_handler.setFormatter(logging.Formatter(LOG_FORMAT))
 
 # Добавление обработчиков к логгеру
@@ -55,24 +55,30 @@ logger.addHandler(stream_handler)
 logger.info("Логирование настроено")
 
 def main() -> None:
+    logger.debug("Запуск main функции")
     check_required_env_vars()
     
     # Инициализация баз данных
+    logger.debug("Инициализация баз данных")
     init_db()
     init_users_db()
     
     # Инициализация RutrackerAPI
+    logger.debug("Инициализация RutrackerAPI")
     rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
     
     # Инициализация бота и диспетчера
+    logger.debug("Инициализация бота и диспетчера")
     updater = Updater(BOT_TOKEN)
     BOT = updater.bot
     dispatcher = updater.dispatcher
     
     # Передаем зависимости в модуль handlers
+    logger.debug("Передача зависимостей в модуль handlers")
     set_dependencies(rutracker_api, BOT)
 
     # Регистрация обработчиков
+    logger.debug("Регистрация обработчиков")
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("add", add_with_arg, pass_args=True))
     
@@ -106,6 +112,7 @@ def main() -> None:
 
     # Запуск планировщика задач
     def scheduled_check():
+        logger.debug("Запуск планировщика задач")
         return check_pages(rutracker_api, BOT)
     
     schedule.every(CHECK_INTERVAL).minutes.do(scheduled_check)
@@ -126,4 +133,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
