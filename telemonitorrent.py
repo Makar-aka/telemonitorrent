@@ -197,7 +197,17 @@ def display_pages_list(update_or_query):
 
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('Привет! Используйте /add <ссылка> для добавления страницы и /list для просмотра страниц.')
+    welcome_message = ('Привет! Я могу промониторить раздачи на рутрекере, чтобы ты ничего не пропустил! '
+                      'Добавь в меня ссылку на сериал, я предупрежу тебя о новых сериях и скачаю его обновления на диск!')
+    
+    # Создаем клавиатуру с кнопками
+    keyboard = [
+        [InlineKeyboardButton("Список", callback_data="back_to_list"), 
+         InlineKeyboardButton("Добавить", callback_data="add_url_button")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    update.message.reply_text(welcome_message, reply_markup=reply_markup)
     logger.info("Команда /start выполнена")
 
 # Обработчик команды /add с одним аргументом
@@ -421,31 +431,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
