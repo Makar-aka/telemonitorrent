@@ -22,9 +22,6 @@ CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
-USE_PROXY = os.getenv('USE_PROXY', 'False').lower() == 'true'
-HTTP_PROXY = os.getenv('HTTP_PROXY')
-HTTPS_PROXY = os.getenv('HTTPS_PROXY')
 RUTRACKER_USERNAME = os.getenv('RUTRACKER_USERNAME')
 RUTRACKER_PASSWORD = os.getenv('RUTRACKER_PASSWORD')
 FILE_DIR = os.getenv('FILE_DIR')
@@ -49,7 +46,6 @@ def init_db():
                         url TEXT,
                         date TEXT,
                         last_checked TEXT)''')
-    # Добавление столбца last_checked, если он отсутствует
     cursor.execute("PRAGMA table_info(pages)")
     columns = [column[1] for column in cursor.fetchall()]
     if 'last_checked' not in columns:
@@ -58,38 +54,43 @@ def init_db():
     conn.close()
     logger.info("База данных инициализирована")
 
+# Функция для проверки наличия URL в базе данных
+def url_exists(url):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title FROM pages WHERE url = ?", (url,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
 # Функция для поиска первого свободного ID в базе данных
 def find_first_available_id():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
-    # Получаем все существующие ID
     cursor.execute("SELECT id FROM pages ORDER BY id")
     existing_ids = [row[0] for row in cursor.fetchall()]
+    conn.close()
     
-    # Ищем первый свободный ID
     next_id = 1
     while next_id in existing_ids:
         next_id += 1
-    
-    conn.close()
     return next_id
 
 # Функция для добавления страницы в базу данных
 def add_page(title, url):
+    # Проверяем, существует ли уже такая ссылка
+    existing_page = url_exists(url)
+    if existing_page:
+        page_id, existing_title = existing_page
+        logger.info(f"Страница с URL {url} уже существует с ID {page_id} и заголовком '{existing_title}'")
+        return None, existing_title, page_id
+    
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
-    # Находим первый свободный ID
     free_id = find_first_available_id()
-    
-    # Вставляем запись с указанным ID
     cursor.execute("INSERT INTO pages (id, title, url) VALUES (?, ?, ?)", 
                    (free_id, title, url))
-    
-    # Получаем ID вставленной записи
     page_id = free_id
-    
     conn.commit()
     conn.close()
     logger.info(f"Страница {title} добавлена для мониторинга с ID {page_id}")
@@ -104,9 +105,9 @@ def add_page(title, url):
         logger.info(f"Торрент-файл для новой страницы {title} скачан в {torrent_file_path}")
     update_last_checked(page_id)
     
-    return page_id
+    return page_id, title, None
 
-# Функция для получения списка страниц из базы данных
+# Базовые функции для работы с БД
 def get_pages():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -115,16 +116,20 @@ def get_pages():
     conn.close()
     return pages
 
-# Функция для обновления ссылки страницы в базе данных
 def update_page_url(page_id, new_url):
+    # Проверяем, существует ли уже такая ссылка
+    existing_page = url_exists(new_url)
+    if existing_page and existing_page[0] != page_id:
+        return False, existing_page[0], existing_page[1]
+    
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("UPDATE pages SET url = ? WHERE id = ?", (new_url, page_id))
     conn.commit()
     conn.close()
     logger.info(f"Ссылка для страницы с ID {page_id} обновлена")
+    return True, None, None
 
-# Функция для обновления даты страницы в базе данных
 def update_page_date(page_id, new_date):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -133,7 +138,6 @@ def update_page_date(page_id, new_date):
     conn.close()
     logger.info(f"Дата для страницы с ID {page_id} обновлена")
 
-# Функция для обновления времени последней проверки страницы в базе данных
 def update_last_checked(page_id):
     last_checked = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn = sqlite3.connect(db_path)
@@ -143,7 +147,6 @@ def update_last_checked(page_id):
     conn.close()
     logger.info(f"Время последней проверки для страницы с ID {page_id} обновлено")
 
-# Функция для удаления страницы из базы данных
 def delete_page(page_id):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -187,20 +190,17 @@ def display_pages_list(update_or_query):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     if isinstance(update_or_query, Update):
-        # Это новое сообщение
         update_or_query.message.reply_text(title_text, reply_markup=reply_markup)
     else:
-        # Это обновление существующего сообщения
         update_or_query.edit_message_text(text=title_text, reply_markup=reply_markup)
     
     logger.info("Список страниц отображен")
 
-# Обработчик команды /start
+# Обработчики команд
 def start(update: Update, context: CallbackContext) -> None:
     welcome_message = ('Привет! Я могу промониторить раздачи на рутрекере, чтобы ты ничего не пропустил! '
                       'Добавь в меня ссылку на сериал, я предупрежу тебя о новых сериях и скачаю его обновления на диск!')
     
-    # Создаем клавиатуру с кнопками
     keyboard = [
         [InlineKeyboardButton("Список", callback_data="back_to_list"), 
          InlineKeyboardButton("Добавить", callback_data="add_url_button")]
@@ -210,21 +210,25 @@ def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(welcome_message, reply_markup=reply_markup)
     logger.info("Команда /start выполнена")
 
-# Обработчик команды /add с одним аргументом
 def add_with_arg(update: Update, context: CallbackContext) -> None:
     url = context.args[0]
     title = rutracker_api.get_page_title(url)
-    add_page(title, url)
-    update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
-    logger.info(f"Команда /add выполнена для URL: {url}")
+    
+    page_id, title, existing_id = add_page(title, url)
+    
+    if page_id is None:
+        # Страница уже существует
+        update.message.reply_text(f'Эта ссылка уже добавлена в мониторинг под названием "{title}" (ID: {existing_id}).')
+        logger.info(f"Попытка добавить дубликат URL: {url}")
+    else:
+        update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
+        logger.info(f"Команда /add выполнена для URL: {url}")
 
-# Обработчик команды /add без аргументов - начало диалога добавления
 def add_start(update: Update, context: CallbackContext) -> int:
     update.message.reply_text('Пришли мне ссылку для мониторинга:')
     logger.info("Запрос ссылки отправлен")
     return WAITING_URL
 
-# Обработчик для получения ссылки
 def add_url(update: Update, context: CallbackContext) -> int:
     url = update.message.text
     logger.debug(f"Получена ссылка: {url}")
@@ -233,22 +237,28 @@ def add_url(update: Update, context: CallbackContext) -> int:
         title = rutracker_api.get_page_title(url)
         logger.debug(f"Получен заголовок: {title}")
         
-        add_page(title, url)
-        logger.debug("Страница добавлена в базу данных")
+        page_id, title, existing_id = add_page(title, url)
         
         keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
-        logger.debug("Отправлено подтверждение добавления")
         
-        logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
+        if page_id is None:
+            # Страница уже существует
+            update.message.reply_text(
+                f'Эта ссылка уже добавлена в мониторинг под названием "{title}" (ID: {existing_id}).',
+                reply_markup=reply_markup
+            )
+            logger.info(f"Попытка добавить дубликат URL: {url}")
+        else:
+            update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
+            logger.debug("Отправлено подтверждение добавления")
+            logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
     except Exception as e:
         logger.error(f"Ошибка при обработке ссылки: {e}")
         update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
     
     return ConversationHandler.END
 
-# Обработчик команды /list
 def list_pages(update: Update, context: CallbackContext) -> None:
     pages = get_pages()
     if not pages:
@@ -258,6 +268,26 @@ def list_pages(update: Update, context: CallbackContext) -> None:
 
     display_pages_list(update)
 
+def update_page_cmd(update: Update, context: CallbackContext) -> None:
+    if len(context.args) != 2:
+        update.message.reply_text('Использование: /update <ID> <ссылка>')
+        logger.warning("Неправильное использование команды /update")
+        return
+
+    page_id = int(context.args[0])
+    new_url = context.args[1]
+    
+    success, existing_id, existing_title = update_page_url(page_id, new_url)
+    
+    if not success:
+        update.message.reply_text(
+            f'Эта ссылка уже добавлена в мониторинг под названием "{existing_title}" (ID: {existing_id}).'
+        )
+        logger.info(f"Попытка обновить на дублирующуюся ссылку: {new_url}")
+    else:
+        update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.')
+        logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
+
 # Обработчик нажатий на кнопки
 def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
@@ -266,23 +296,20 @@ def button(update: Update, context: CallbackContext) -> None:
     logger.debug(f"Обработка callback данных: {data}")
 
     if data == "back_to_list":
-        # Отображаем список страниц
         display_pages_list(query)
         logger.info("Возврат к списку страниц")
         return
 
     if data == "add_url_button":
-        # Отправляем новое сообщение для запроса URL
         context.bot.send_message(
             chat_id=query.message.chat_id,
             text='Пришли мне ссылку для мониторинга:'
         )
         logger.info("Отправлен запрос на ссылку после нажатия кнопки")
-        # Сохраняем в контексте информацию о запросе URL
         context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
         return
 
-    # Разбираем данные callback (предполагая, что они имеют формат action_id)
+    # Разбираем данные callback
     parts = data.split('_')
     if len(parts) < 2:
         logger.warning(f"Неверный формат данных callback: {data}")
@@ -334,22 +361,8 @@ def button(update: Update, context: CallbackContext) -> None:
             query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
 
-# Обработчик команды /update
-def update_page(update: Update, context: CallbackContext) -> None:
-    if len(context.args) != 2:
-        update.message.reply_text('Использование: /update <ID> <ссылка>')
-        logger.warning("Неправильное использование команды /update")
-        return
-
-    page_id = int(context.args[0])
-    new_url = context.args[1]
-    update_page_url(page_id, new_url)
-    update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.')
-    logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
-
 # Обработчик для текстовых сообщений
 def handle_text(update: Update, context: CallbackContext) -> None:
-    # Проверяем, ожидаем ли мы URL от этого пользователя
     chat_id = update.message.chat_id
     waiting_key = f'waiting_url_{chat_id}'
     
@@ -361,38 +374,40 @@ def handle_text(update: Update, context: CallbackContext) -> None:
             title = rutracker_api.get_page_title(url)
             logger.debug(f"Получен заголовок: {title}")
             
-            page_id = add_page(title, url)
-            logger.debug(f"Страница добавлена в базу данных с ID {page_id}")
+            page_id, title, existing_id = add_page(title, url)
             
             keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
-            logger.debug("Отправлено подтверждение добавления")
             
-            # Сбрасываем флаг ожидания
+            if page_id is None:
+                # Страница уже существует
+                update.message.reply_text(
+                    f'Эта ссылка уже добавлена в мониторинг под названием "{title}" (ID: {existing_id}).',
+                    reply_markup=reply_markup
+                )
+                logger.info(f"Попытка добавить дубликат URL: {url}")
+            else:
+                update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
+                logger.debug("Отправлено подтверждение добавления")
+                logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
+            
             context.bot_data[waiting_key] = False
             logger.debug(f"Сброшен флаг ожидания URL для чата {chat_id}")
             
-            logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
         except Exception as e:
             logger.error(f"Ошибка при обработке ссылки: {e}")
             update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
             context.bot_data[waiting_key] = False
 
 def main() -> None:
-    # Инициализация базы данных
     init_db()
-
-    # Создание объекта Updater и передача ему токена вашего бота
     updater = Updater(BOT_TOKEN)
-
-    # Получение диспетчера для регистрации обработчиков
     dispatcher = updater.dispatcher
 
-    # Регистрация обработчика /add с аргументами
+    # Регистрация обработчиков
+    dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("add", add_with_arg, pass_args=True))
     
-    # Регистрация обработчика диалога добавления страницы
     add_conversation = ConversationHandler(
         entry_points=[CommandHandler("add", add_start, filters=Filters.command & ~Filters.regex(r'^/add\s+\S+'))],
         states={
@@ -402,15 +417,9 @@ def main() -> None:
     )
     dispatcher.add_handler(add_conversation)
     
-    # Регистрация обработчиков команд
-    dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("list", list_pages))
-    dispatcher.add_handler(CommandHandler("update", update_page))
-    
-    # Обработчик для кнопок
+    dispatcher.add_handler(CommandHandler("update", update_page_cmd))
     dispatcher.add_handler(CallbackQueryHandler(button))
-    
-    # Обработчик для текстовых сообщений
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
 
     # Запуск планировщика задач
@@ -421,7 +430,6 @@ def main() -> None:
             schedule.run_pending()
             time.sleep(1)
 
-    # Запуск планировщика в отдельном потоке
     schedule_thread = Thread(target=run_schedule)
     schedule_thread.start()
 
@@ -431,6 +439,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
 
