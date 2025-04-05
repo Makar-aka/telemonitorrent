@@ -26,6 +26,7 @@ RUTRACKER_USERNAME = os.getenv('RUTRACKER_USERNAME')
 RUTRACKER_PASSWORD = os.getenv('RUTRACKER_PASSWORD')
 FILE_DIR = os.getenv('FILE_DIR')
 WHITELIST_PATH = os.getenv('WHITELIST_PATH', 'whitelist.txt')
+NOTIFICATIONS_ENABLED = os.getenv('NOTIFICATIONS_ENABLED', 'True').lower() == 'true'
 
 # Настройка логирования
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -79,6 +80,31 @@ def check_user_access(update: Update) -> bool:
         'Пожалуйста, свяжитесь с администратором.'
     )
     return False
+
+# Функция для отправки уведомлений всем пользователям в белом списке
+def send_notification_to_all_users(bot, message, keyboard=None):
+    if not NOTIFICATIONS_ENABLED:
+        logger.info("Уведомления отключены в настройках")
+        return
+
+    reply_markup = None
+    if keyboard:
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
+    success_count = 0
+    for user_id in WHITELIST:
+        try:
+            bot.send_message(
+                chat_id=user_id,
+                text=message,
+                reply_markup=reply_markup,
+                parse_mode='HTML'
+            )
+            success_count += 1
+        except Exception as e:
+            logger.error(f"Ошибка при отправке уведомления пользователю {user_id}: {e}")
+    
+    logger.info(f"Отправлено уведомлений: {success_count} из {len(WHITELIST)}")
 
 # Функция для инициализации базы данных
 def init_db():
@@ -160,6 +186,14 @@ def get_pages():
     conn.close()
     return pages
 
+def get_page_by_id(page_id):
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, title, url, date, last_checked FROM pages WHERE id = ?", (page_id,))
+    page = cursor.fetchone()
+    conn.close()
+    return page
+
 def update_page_url(page_id, new_url):
     # Проверяем, существует ли уже такая ссылка
     existing_page = url_exists(new_url)
@@ -201,17 +235,45 @@ def delete_page(page_id):
 
 # Функция для проверки изменений на страницах
 def check_pages():
+    logger.info("Начата проверка страниц на обновления")
     pages = get_pages()
+    updates_found = False
+    
     for page in pages:
         page_id, title, url, old_date, _ = page
         page_content = rutracker_api.get_page_content(url)
         new_date = rutracker_api.parse_date(page_content)
+        
         if new_date and new_date != old_date:
+            updates_found = True
             torrent_file_path = os.path.join(FILE_DIR, f'{page_id}.torrent')
             rutracker_api.download_torrent_by_url(url, torrent_file_path)
             update_page_date(page_id, new_date)
             logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан в {torrent_file_path}")
+            
+            # Отправляем уведомление о найденном обновлении
+            notification_message = (
+                f"<b>🆕 Найдено обновление!</b>\n\n"
+                f"<b>Название:</b> {title}\n"
+                f"<b>Новая дата:</b> {new_date}\n"
+                f"<b>Предыдущая дата:</b> {old_date or 'Не задана'}\n"
+                f"<b>ID:</b> {page_id}"
+            )
+            
+            keyboard = [
+                [InlineKeyboardButton("Открыть раздачу", url=url)],
+                [InlineKeyboardButton("Посмотреть список", callback_data="back_to_list")]
+            ]
+            
+            # Отправляем уведомление всем пользователям в белом списке
+            send_notification_to_all_users(BOT, notification_message, keyboard)
+            
         update_last_checked(page_id)
+    
+    if not updates_found:
+        logger.info("Обновлений не найдено")
+    
+    return updates_found
 
 # Функция для отображения списка страниц
 def display_pages_list(update_or_query):
@@ -275,7 +337,12 @@ def add_with_arg(update: Update, context: CallbackContext) -> None:
         update.message.reply_text(f'Эта ссылка уже добавлена в мониторинг под названием "{title}" (ID: {existing_id}).')
         logger.info(f"Попытка добавить дубликат URL: {url}")
     else:
-        update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
+        keyboard = [
+            [InlineKeyboardButton("Назад к списку", callback_data="back_to_list"),
+             InlineKeyboardButton("Добавить еще", callback_data="add_url_button")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'Страница {title} добавлена для мониторинга.', reply_markup=reply_markup)
         logger.info(f"Команда /add выполнена для URL: {url}")
 
 @restricted
@@ -295,7 +362,10 @@ def add_url(update: Update, context: CallbackContext) -> int:
         
         page_id, title, existing_id = add_page(title, url)
         
-        keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+        keyboard = [
+            [InlineKeyboardButton("Назад к списку", callback_data="back_to_list"),
+             InlineKeyboardButton("Добавить еще", callback_data="add_url_button")]
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         if page_id is None:
@@ -332,7 +402,9 @@ def cancel_add(update: Update, context: CallbackContext) -> int:
 def list_pages(update: Update, context: CallbackContext) -> None:
     pages = get_pages()
     if not pages:
-        update.message.reply_text('Нет страниц для мониторинга.')
+        keyboard = [[InlineKeyboardButton("Добавить", callback_data="add_url_button")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text('Нет страниц для мониторинга.', reply_markup=reply_markup)
         logger.info("Команда /list выполнена: нет страниц для мониторинга")
         return
 
@@ -356,8 +428,27 @@ def update_page_cmd(update: Update, context: CallbackContext) -> None:
         )
         logger.info(f"Попытка обновить на дублирующуюся ссылку: {new_url}")
     else:
-        update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.')
+        keyboard = [
+            [InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.', reply_markup=reply_markup)
         logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
+
+# Команда для запуска проверки вручную
+@restricted
+def check_now(update: Update, context: CallbackContext) -> None:
+    update.message.reply_text('Запускаю проверку страниц на обновления...')
+    
+    # Выполняем проверку
+    updates_found = check_pages()
+    
+    if updates_found:
+        update.message.reply_text('Проверка завершена. Найдены обновления!')
+    else:
+        update.message.reply_text('Проверка завершена. Обновлений не найдено.')
+    
+    logger.info("Запущена ручная проверка страниц")
 
 # Обработчик нажатий на кнопки
 @restricted
@@ -466,7 +557,10 @@ def handle_text(update: Update, context: CallbackContext) -> None:
             
             page_id, title, existing_id = add_page(title, url)
             
-            keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+            keyboard = [
+                [InlineKeyboardButton("Назад к списку", callback_data="back_to_list"),
+                 InlineKeyboardButton("Добавить еще", callback_data="add_url_button")]
+            ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
             if page_id is None:
@@ -490,11 +584,12 @@ def handle_text(update: Update, context: CallbackContext) -> None:
             context.bot_data[waiting_key] = False
 
 def main() -> None:
-    global WHITELIST
+    global WHITELIST, BOT
     WHITELIST = load_whitelist()
     
     init_db()
     updater = Updater(BOT_TOKEN)
+    BOT = updater.bot
     dispatcher = updater.dispatcher
 
     # Регистрация обработчиков
@@ -512,6 +607,7 @@ def main() -> None:
     
     dispatcher.add_handler(CommandHandler("list", list_pages))
     dispatcher.add_handler(CommandHandler("update", update_page_cmd))
+    dispatcher.add_handler(CommandHandler("check", check_now))
     dispatcher.add_handler(CallbackQueryHandler(button))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
 
