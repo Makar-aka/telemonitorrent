@@ -114,22 +114,31 @@ def check_user_access(update: Update) -> bool:
     if user_data:
         return True
     
-    # Если пользователя нет в базе, добавляем его с ограниченными правами
+    # Если пользователя нет в базе
     username = update.effective_user.username or "Не указано"
     first_name = update.effective_user.first_name or "Не указано"
     last_name = update.effective_user.last_name or "Не указано"
     
-    # Добавляем первого пользователя как администратора
-    is_first_user = len(get_users()) == 0
-    is_admin = 1 if is_first_user else 0
+    # Проверяем, пуста ли база (для первого администратора)
+    if len(get_users()) == 0:
+        add_user(user_id, is_admin=1)
+        logger.info(
+            f"Первый пользователь добавлен как администратор: ID={user_id}, "
+            f"Username={username}, Name={first_name} {last_name}"
+        )
+        return True
     
-    add_user(user_id, is_admin=is_admin)
-    logger.info(
-        f"Новый пользователь добавлен: ID={user_id}, Admin={is_admin}, "
+    logger.warning(
+        f"Попытка доступа неавторизованного пользователя: ID={user_id}, "
         f"Username={username}, Name={first_name} {last_name}"
     )
     
-    return True
+    # Сообщаем пользователю, что у него нет доступа
+    update.message.reply_text(
+        'Извините, у вас нет доступа к этому боту. '
+        'Пожалуйста, свяжитесь с администратором, чтобы получить доступ.'
+    )
+    return False
 
 # Функция для проверки прав администратора
 def check_admin_access(update: Update) -> bool:
@@ -597,7 +606,18 @@ def list_users(update: Update, context: CallbackContext) -> None:
     users_text = 'Список пользователей:\n\n'
     for user in users:
         user_id, is_admin, is_subscribed = user
-        users_text += f'ID: {user_id}, Админ: {"Да" if is_admin else "Нет"}, Подписка: {"Да" if is_subscribed else "Нет"}\n'
+        # Попытка получить информацию о пользователе через API
+        try:
+            user_info = context.bot.get_chat(user_id)
+            username = user_info.username or "Нет"
+            name = f"{user_info.first_name or ''} {user_info.last_name or ''}".strip() or "Нет"
+            user_details = f"@{username}, Имя: {name}"
+        except Exception:
+            user_details = "Информация недоступна"
+        
+        users_text += (f'ID: {user_id}, {user_details}\n'
+                      f'Админ: {"Да" if is_admin else "Нет"}, '
+                      f'Подписка: {"Да" if is_subscribed else "Нет"}\n\n')
     
     update.message.reply_text(users_text)
 
@@ -645,6 +665,73 @@ def remove_admin(update: Update, context: CallbackContext) -> None:
         update_user_admin(target_id, 0)
         update.message.reply_text(f'У пользователя с ID {target_id} удалены права администратора.')
         logger.info(f"У пользователя {target_id} удалены права администратора")
+    except ValueError:
+        update.message.reply_text('ID пользователя должен быть числом.')
+
+# Команда для администратора - добавление пользователя
+@admin_required
+def add_user_cmd(update: Update, context: CallbackContext) -> None:
+    if len(context.args) < 1:
+        update.message.reply_text('Использование: /adduser <ID> [is_admin=0] [sub=1]')
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        is_admin = int(context.args[1]) if len(context.args) > 1 else 0
+        sub = int(context.args[2]) if len(context.args) > 2 else 1
+        
+        # Проверка корректности значений
+        if is_admin not in [0, 1]:
+            update.message.reply_text('Значение is_admin должно быть 0 или 1')
+            return
+        
+        if sub not in [0, 1]:
+            update.message.reply_text('Значение sub должно быть 0 или 1')
+            return
+        
+        # Проверяем, существует ли уже пользователь
+        user_data = user_exists(target_id)
+        if user_data:
+            update.message.reply_text(
+                f'Пользователь с ID {target_id} уже существует. '
+                f'Права администратора: {"Да" if user_data[1] else "Нет"}, '
+                f'Подписка: {"Да" if user_data[2] else "Нет"}'
+            )
+            return
+        
+        add_user(target_id, is_admin, sub)
+        update.message.reply_text(
+            f'Пользователь с ID {target_id} добавлен. '
+            f'Права администратора: {"Да" if is_admin else "Нет"}, '
+            f'Подписка: {"Да" if sub else "Нет"}'
+        )
+        logger.info(f"Пользователь {target_id} добавлен с правами: admin={is_admin}, sub={sub}")
+    except ValueError:
+        update.message.reply_text('ID пользователя должен быть числом.')
+
+# Команда для администратора - удаление пользователя
+@admin_required
+def delete_user_cmd(update: Update, context: CallbackContext) -> None:
+    if len(context.args) != 1:
+        update.message.reply_text('Использование: /userdel <ID>')
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        
+        # Проверка, не пытается ли админ удалить сам себя
+        if target_id == update.effective_user.id:
+            update.message.reply_text('Нельзя удалить самого себя.')
+            return
+        
+        user_data = user_exists(target_id)
+        if not user_data:
+            update.message.reply_text(f'Пользователь с ID {target_id} не найден.')
+            return
+        
+        delete_user(target_id)
+        update.message.reply_text(f'Пользователь с ID {target_id} удален.')
+        logger.info(f"Пользователь {target_id} удален из базы данных")
     except ValueError:
         update.message.reply_text('ID пользователя должен быть числом.')
 
@@ -831,6 +918,8 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("users", list_users))
     dispatcher.add_handler(CommandHandler("makeadmin", make_admin))
     dispatcher.add_handler(CommandHandler("removeadmin", remove_admin))
+    dispatcher.add_handler(CommandHandler("adduser", add_user_cmd))
+    dispatcher.add_handler(CommandHandler("userdel", delete_user_cmd))
     
     dispatcher.add_handler(CallbackQueryHandler(button))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
@@ -852,4 +941,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
