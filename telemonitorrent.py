@@ -735,6 +735,71 @@ def delete_user_cmd(update: Update, context: CallbackContext) -> None:
     except ValueError:
         update.message.reply_text('ID пользователя должен быть числом.')
 
+@admin_required
+def admin_help_cmd(update: Update, context: CallbackContext) -> None:
+    """Показывает список всех доступных команд для администратора"""
+    help_text = "<b>Список доступных команд:</b>\n\n"
+    
+    # Команды для всех пользователей
+    help_text += "<b>Общие команды:</b>\n"
+    help_text += "/start - Начало работы с ботом\n"
+    help_text += "/list - Показать список отслеживаемых страниц\n"
+    help_text += "/add <ссылка> - Добавить страницу для мониторинга\n"
+    help_text += "/update <ID> <ссылка> - Обновить ссылку для страницы\n"
+    help_text += "/check - Запустить проверку обновлений вручную\n"
+    help_text += "/subscribe - Включить/выключить уведомления\n"
+    help_text += "/status - Показать ваш статус и настройки\n\n"
+    
+    # Команды для администраторов
+    help_text += "<b>Команды администратора:</b>\n"
+    help_text += "/users - Показать список всех пользователей\n"
+    help_text += "/adduser <ID> [is_admin=0] [sub=1] - Добавить пользователя\n"
+    help_text += "/userdel <ID> - Удалить пользователя\n"
+    help_text += "/makeadmin <ID> - Сделать пользователя администратором\n"
+    help_text += "/removeadmin <ID> - Убрать права администратора\n"
+    help_text += "/help - Показать этот список команд\n\n"
+    
+    help_text += "<b>Параметры:</b>\n"
+    help_text += "ID - идентификатор пользователя или страницы\n"
+    help_text += "is_admin - права администратора (0 или 1)\n"
+    help_text += "sub - подписка на уведомления (0 или 1)"
+    
+    keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='HTML')
+    logger.info("Отображен список команд администратора")
+
+# Версия справки для обычных пользователей
+@restricted
+def user_help_cmd(update: Update, context: CallbackContext) -> None:
+    """Показывает список доступных команд для обычного пользователя"""
+    
+    # Проверяем, является ли пользователь администратором
+    user_id = update.effective_user.id
+    user_data = user_exists(user_id)
+    
+    if user_data and user_data[1] == 1:  # is_admin = 1
+        # Перенаправляем на админскую справку
+        return admin_help_cmd(update, context)
+    
+    help_text = "<b>Список доступных команд:</b>\n\n"
+    
+    # Команды для всех пользователей
+    help_text += "/start - Начало работы с ботом\n"
+    help_text += "/list - Показать список отслеживаемых страниц\n"
+    help_text += "/add <ссылка> - Добавить страницу для мониторинга\n"
+    help_text += "/update <ID> <ссылка> - Обновить ссылку для страницы\n"
+    help_text += "/check - Запустить проверку обновлений вручную\n"
+    help_text += "/subscribe - Включить/выключить уведомления\n"
+    help_text += "/status - Показать ваш статус и настройки\n"
+    help_text += "/help - Показать этот список команд"
+    
+    keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='HTML')
+    logger.info("Отображен список команд пользователя")
 # Обработчик нажатий на кнопки
 @restricted
 def button(update: Update, context: CallbackContext) -> None:
@@ -879,71 +944,6 @@ def check_required_env_vars():
             print(f" - {var}")
         print("\nДобавьте их в файл .env или установите в окружении.")
         sys.exit(1)
-@admin_required
-def admin_help_cmd(update: Update, context: CallbackContext) -> None:
-    """Показывает список всех доступных команд для администратора"""
-    help_text = "<b>Список доступных команд:</b>\n\n"
-    
-    # Команды для всех пользователей
-    help_text += "<b>Общие команды:</b>\n"
-    help_text += "/start - Начало работы с ботом\n"
-    help_text += "/list - Показать список отслеживаемых страниц\n"
-    help_text += "/add <ссылка> - Добавить страницу для мониторинга\n"
-    help_text += "/update <ID> <ссылка> - Обновить ссылку для страницы\n"
-    help_text += "/check - Запустить проверку обновлений вручную\n"
-    help_text += "/subscribe - Включить/выключить уведомления\n"
-    help_text += "/status - Показать ваш статус и настройки\n\n"
-    
-    # Команды для администраторов
-    help_text += "<b>Команды администратора:</b>\n"
-    help_text += "/users - Показать список всех пользователей\n"
-    help_text += "/adduser <ID> [is_admin=0] [sub=1] - Добавить пользователя\n"
-    help_text += "/userdel <ID> - Удалить пользователя\n"
-    help_text += "/makeadmin <ID> - Сделать пользователя администратором\n"
-    help_text += "/removeadmin <ID> - Убрать права администратора\n"
-    help_text += "/help - Показать этот список команд\n\n"
-    
-    help_text += "<b>Параметры:</b>\n"
-    help_text += "ID - идентификатор пользователя или страницы\n"
-    help_text += "is_admin - права администратора (0 или 1)\n"
-    help_text += "sub - подписка на уведомления (0 или 1)"
-    
-    keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='HTML')
-    logger.info("Отображен список команд администратора")
-
-# Версия справки для обычных пользователей
-@restricted
-def user_help_cmd(update: Update, context: CallbackContext) -> None:
-    """Показывает список доступных команд для обычного пользователя"""
-    
-    # Проверяем, является ли пользователь администратором
-    user_id = update.effective_user.id
-    user_data = user_exists(user_id)
-    
-    if user_data and user_data[1] == 1:  # is_admin = 1
-        # Перенаправляем на админскую справку
-        return admin_help_cmd(update, context)
-    
-    help_text = "<b>Список доступных команд:</b>\n\n"
-    
-    # Команды для всех пользователей
-    help_text += "/start - Начало работы с ботом\n"
-    help_text += "/list - Показать список отслеживаемых страниц\n"
-    help_text += "/add <ссылка> - Добавить страницу для мониторинга\n"
-    help_text += "/update <ID> <ссылка> - Обновить ссылку для страницы\n"
-    help_text += "/check - Запустить проверку обновлений вручную\n"
-    help_text += "/subscribe - Включить/выключить уведомления\n"
-    help_text += "/status - Показать ваш статус и настройки\n"
-    help_text += "/help - Показать этот список команд"
-    
-    keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    update.message.reply_text(help_text, reply_markup=reply_markup, parse_mode='HTML')
-    logger.info("Отображен список команд пользователя")
 
 def main() -> None:
     check_required_env_vars()
