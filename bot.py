@@ -119,6 +119,7 @@ def main() -> None:
 
     def run_schedule():
         while True:
+            logger.debug("Выполнение запланированных задач")
             schedule.run_pending()
             time.sleep(1)
 
