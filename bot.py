@@ -26,8 +26,8 @@ from handlers import (
 # Загрузка переменных окружения из .env файла
 load_dotenv()
 
-LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
-LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+LOG_FILE = os.getenv('LOG_FILE')
+LOG_FORMAT = os.getenv('LOG_FORMAT')
 
 # Создание файла логов, если он не существует
 if not os.path.exists(LOG_FILE):
