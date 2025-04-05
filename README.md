@@ -23,10 +23,11 @@ RUTRACKER_PASSWORD=your_password\
 FILE_DIR=files\
 USE_PROXY=true\
 HTTP_PROXY=http://1.2.3.4:5678\
-HTTPS_PROXY=http://1.2.3.4:5678
+HTTPS_PROXY=http://1.2.3.4:5678\
 LOG_FILE=bot.log\
 LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s\
-LOG_LEVEL=DEBUG
+DB_PATH=database.db\
+USERS_DB_PATH=users.db
 
 
 ## Запуск
