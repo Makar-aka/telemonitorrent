@@ -166,6 +166,24 @@ def check_pages():
             logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан в {torrent_file_path}")
         update_last_checked(page_id)
 
+# Функция для отображения списка страниц
+def display_pages_list(update_or_query):
+    keyboard = []
+    pages = get_pages()
+    if pages:
+        keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
+    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    if isinstance(update_or_query, Update):
+        # Это новое сообщение
+        update_or_query.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
+    else:
+        # Это обновление существующего сообщения
+        update_or_query.edit_message_text(text='Страницы для мониторинга:', reply_markup=reply_markup)
+    
+    logger.info("Список страниц отображен")
+
 # Обработчик команды /start
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Привет! Используйте /add <ссылка> для добавления страницы и /list для просмотра страниц.')
@@ -217,22 +235,42 @@ def list_pages(update: Update, context: CallbackContext) -> None:
         logger.info("Команда /list выполнена: нет страниц для мониторинга")
         return
 
-    keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
-    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
-    logger.info("Команда /list выполнена")
+    display_pages_list(update)
 
 # Обработчик нажатий на кнопки
 def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
-    data = query.data.split('_')
-    action = data[0]
-    logger.debug(f"Обработка действия: {action}")
+    data = query.data
+    logger.debug(f"Обработка callback данных: {data}")
 
+    if data == "back_to_list":
+        # Отображаем список страниц
+        display_pages_list(query)
+        logger.info("Возврат к списку страниц")
+        return
+
+    if data == "add_url_button":
+        # Отправляем новое сообщение для запроса URL
+        context.bot.send_message(
+            chat_id=query.message.chat_id,
+            text='Пришли мне ссылку для мониторинга:'
+        )
+        logger.info("Отправлен запрос на ссылку после нажатия кнопки")
+        # Сохраняем в контексте информацию о запросе URL
+        context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
+        return
+
+    # Разбираем данные callback (предполагая, что они имеют формат action_id)
+    parts = data.split('_')
+    if len(parts) < 2:
+        logger.warning(f"Неверный формат данных callback: {data}")
+        return
+    
+    action = parts[0]
+    
     if action == 'page':
-        page_id = int(data[1])
+        page_id = int(parts[1])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT url, date, last_checked FROM pages WHERE id = ?", (page_id,))
@@ -252,7 +290,7 @@ def button(update: Update, context: CallbackContext) -> None:
             logger.info(f"Кнопка страницы с ID {page_id} нажата, дата: {edit_date}")
 
     elif action == 'delete':
-        page_id = int(data[1])
+        page_id = int(parts[1])
         delete_page(page_id)
         keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -260,7 +298,7 @@ def button(update: Update, context: CallbackContext) -> None:
         logger.info(f"Кнопка удаления для страницы с ID {page_id} нажата")
 
     elif action == 'refresh':
-        page_id = int(data[1])
+        page_id = int(parts[1])
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT url FROM pages WHERE id = ?", (page_id,))
@@ -274,27 +312,6 @@ def button(update: Update, context: CallbackContext) -> None:
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
-
-    elif action == 'back_to_list':
-        keyboard = []
-        pages = get_pages()
-        if pages:
-            keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
-        keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        query.edit_message_text(text='Страницы для мониторинга:', reply_markup=reply_markup)
-        logger.info("Возврат к списку страниц")
-
-    elif action == 'add':
-        if len(data) > 2 and data[1] == 'url' and data[2] == 'button':
-            # Отправляем новое сообщение для запроса URL
-            context.bot.send_message(
-                chat_id=query.message.chat_id,
-                text='Пришли мне ссылку для мониторинга:'
-            )
-            logger.info("Отправлен запрос на ссылку после нажатия кнопки")
-            # Сохраняем в контексте информацию о запросе URL
-            context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
