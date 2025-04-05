@@ -21,6 +21,7 @@ HTTP_PROXY = os.getenv('HTTP_PROXY')
 HTTPS_PROXY = os.getenv('HTTPS_PROXY')
 RUTRACKER_USERNAME = os.getenv('RUTRACKER_USERNAME')
 RUTRACKER_PASSWORD = os.getenv('RUTRACKER_PASSWORD')
+FILE_DIR = os.getenv('FILE_DIR')
 
 # Настройка логирования
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -115,10 +116,10 @@ def check_pages():
         new_date = rutracker_api.parse_date(page_content)
         if new_date and new_date != old_date:
             torrent_url = 'URL_ТОРРЕНТ_ФАЙЛА'  # Замените на URL торрент-файла
-            torrent_file_path = f'torrents/{page_id}.torrent'  # Замените на путь к торрент-файлу
+            torrent_file_path = os.path.join(FILE_DIR, f'{page_id}.torrent')  # Замените на путь к торрент-файлу
             rutracker_api.download_torrent_file(torrent_url, torrent_file_path)
             update_page_date(page_id, new_date)
-            logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан")
+            logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан в {torrent_file_path}")
         update_last_checked(page_id)
 
 # Обработчик команды /start
