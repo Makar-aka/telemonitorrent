@@ -9,6 +9,7 @@ def check_user_access(update: Update, user_exists_func, add_user_func, get_users
     user_data = user_exists_func(user_id)
     
     if user_data:
+        logger.debug(f"Пользователь {user_id} имеет доступ")
         return True
     
     # Если пользователя нет в базе
@@ -43,8 +44,10 @@ def check_admin_access(update: Update, user_exists_func) -> bool:
     user_data = user_exists_func(user_id)
     
     if user_data and user_data[1] == 1:  # is_admin = 1
+        logger.debug(f"Пользователь {user_id} имеет права администратора")
         return True
     
+    logger.warning(f"Пользователь {user_id} не имеет прав администратора")
     update.message.reply_text(
         'У вас нет прав администратора для выполнения этой команды.'
     )
@@ -73,6 +76,7 @@ def send_notification_to_subscribers(bot, message, keyboard=None):
                 parse_mode='HTML'
             )
             success_count += 1
+            logger.debug(f"Уведомление отправлено пользователю {user_id}")
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомления пользователю {user_id}: {e}")
     
@@ -86,6 +90,7 @@ def check_pages(rutracker_api, BOT):
     
     for page in pages:
         page_id, title, url, old_date, _ = page
+        logger.debug(f"Проверка страницы: {title} (ID: {page_id})")
         page_content = rutracker_api.get_page_content(url)
         new_date = rutracker_api.parse_date(page_content)
         
@@ -141,3 +146,4 @@ def admin_required(user_exists_func, add_user_func, get_users_func):
             return func(update, context, *args, **kwargs)
         return wrapped
     return decorator
+
