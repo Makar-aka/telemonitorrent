@@ -1,7 +1,9 @@
-# Telegram Bot for Rutracker
+# TELEMONITORRENT
 
-Этот проект представляет собой Telegram-бота для взаимодействия с Rutracker. Бот позволяет пользователям добавлять, обновлять и проверять страницы, а также управлять подписками и пользователями.
-
+Этот проект предтавляет собой Telegram-бота для взаимодействия с Rutracker.
+Бот хранит ссылки на страницы и проверяет их на наличие обновлений раздач.
+Добавь ссылку на сериал и получай уведомления о новых сериях.
+Так же бот сохраняет файлы в локальную папку.
 ## Установка
 
 1. Клонируйте репозиторий:
@@ -14,15 +16,42 @@ pip install -r requirements.txt
 
 4. Создайте файл `.env` в корневом каталоге проекта и добавьте в него следующие строки:
 
-LOG_FILE=bot.log\
-LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s\
 BOT_TOKEN=your_bot_token\
 CHECK_INTERVAL=10\
 RUTRACKER_USERNAME=your_username\
-RUTRACKER_PASSWORD=your_password
+RUTRACKER_PASSWORD=your_password\
+FILE_DIR=files\
+USE_PROXY=true\
+HTTP_PROXY=http://1.2.3.4:5678\
+HTTPS_PROXY=http://1.2.3.4:5678
+LOG_FILE=bot.log\
+LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s\
+LOG_LEVEL=DEBUG
 
-5. Запустите бота:
 
+## Запуск
+### Обычный запуск
+python3 bot.py
+
+### Запуск как системный сервис
+1.	Настройте файл сервиса:\
+sudo cp telemon.service /etc/systemd/system/\
+Поменяйте директории в файле telemon.service на свои. Для этого выполните команду:\
+sudo nano /etc/systemd/system/telemon.service
+sudo systemctl daemon-reload\
+sudo systemctl enable telemon.service\
+sudo systemctl start telemon.service
+
+2.	Установите сервис:\
+sudo cp telemon.service /etc/systemd/system/\
+sudo systemctl daemon-reload\
+sudo systemctl enable telemon.service\
+sudo systemctl start telemon.service
+
+3.	Управление сервисом:\
+sudo systemctl status telemon.service  # Проверка статуса\
+sudo systemctl stop telemon.service    # Остановка\
+sudo systemctl restart telemon.service # Перезапуск
 
 ## Использование
 

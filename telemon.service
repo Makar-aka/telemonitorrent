@@ -1,0 +1,13 @@
+[Unit]
+Description=telemon service
+After=network.target
+
+[Service]
+WorkingDirectory=/до раб директории с ботом
+User=ваш юзер
+Group=ваша группа
+ExecStart=/usr/bin/python3 /до bot.py файла
+Restart=on-failure
+RestartSec=3
+[Install]
+WantedBy=multi-user.target
