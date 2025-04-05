@@ -25,6 +25,7 @@ LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s'
 RUTRACKER_USERNAME = os.getenv('RUTRACKER_USERNAME')
 RUTRACKER_PASSWORD = os.getenv('RUTRACKER_PASSWORD')
 FILE_DIR = os.getenv('FILE_DIR')
+WHITELIST_PATH = os.getenv('WHITELIST_PATH', 'whitelist.txt')
 
 # Настройка логирования
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
@@ -35,6 +36,49 @@ db_path = 'database.db'
 
 # Инициализация RutrackerAPI
 rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
+
+# Загрузка белого списка пользователей
+def load_whitelist():
+    whitelist = set()
+    if os.path.exists(WHITELIST_PATH):
+        with open(WHITELIST_PATH, 'r') as file:
+            for line in file:
+                line = line.strip()
+                if line and not line.startswith('#'):
+                    try:
+                        user_id = int(line)
+                        whitelist.add(user_id)
+                    except ValueError:
+                        logger.warning(f"Некорректный ID пользователя в файле whitelist: {line}")
+    else:
+        # Создаем пустой файл whitelist.txt
+        with open(WHITELIST_PATH, 'w') as file:
+            file.write("# Добавьте ID пользователей по одному на строку\n")
+        logger.warning(f"Файл белого списка не найден, создан пустой файл: {WHITELIST_PATH}")
+    
+    logger.info(f"Загружен белый список: {len(whitelist)} пользователей")
+    return whitelist
+
+# Проверка доступа пользователя
+def check_user_access(update: Update) -> bool:
+    user_id = update.effective_user.id
+    if user_id in WHITELIST:
+        return True
+    
+    username = update.effective_user.username or "Не указано"
+    first_name = update.effective_user.first_name or "Не указано"
+    last_name = update.effective_user.last_name or "Не указано"
+    
+    logger.warning(
+        f"Попытка доступа от неавторизованного пользователя: ID={user_id}, "
+        f"Username={username}, Name={first_name} {last_name}"
+    )
+    
+    update.message.reply_text(
+        'Извините, у вас нет доступа к этому боту. '
+        'Пожалуйста, свяжитесь с администратором.'
+    )
+    return False
 
 # Функция для инициализации базы данных
 def init_db():
@@ -196,7 +240,16 @@ def display_pages_list(update_or_query):
     
     logger.info("Список страниц отображен")
 
+# Декоратор для проверки доступа
+def restricted(func):
+    def wrapped(update, context, *args, **kwargs):
+        if not check_user_access(update):
+            return
+        return func(update, context, *args, **kwargs)
+    return wrapped
+
 # Обработчики команд
+@restricted
 def start(update: Update, context: CallbackContext) -> None:
     welcome_message = ('Привет! Я могу промониторить раздачи на рутрекере, чтобы ты ничего не пропустил! '
                       'Добавь в меня ссылку на сериал, я предупрежу тебя о новых сериях и скачаю его обновления на диск!')
@@ -210,6 +263,7 @@ def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(welcome_message, reply_markup=reply_markup)
     logger.info("Команда /start выполнена")
 
+@restricted
 def add_with_arg(update: Update, context: CallbackContext) -> None:
     url = context.args[0]
     title = rutracker_api.get_page_title(url)
@@ -224,11 +278,13 @@ def add_with_arg(update: Update, context: CallbackContext) -> None:
         update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
         logger.info(f"Команда /add выполнена для URL: {url}")
 
+@restricted
 def add_start(update: Update, context: CallbackContext) -> int:
     update.message.reply_text('Пришли мне ссылку для мониторинга:')
     logger.info("Запрос ссылки отправлен")
     return WAITING_URL
 
+@restricted
 def add_url(update: Update, context: CallbackContext) -> int:
     url = update.message.text
     logger.debug(f"Получена ссылка: {url}")
@@ -259,6 +315,20 @@ def add_url(update: Update, context: CallbackContext) -> int:
     
     return ConversationHandler.END
 
+@restricted
+def cancel_add(update: Update, context: CallbackContext) -> int:
+    chat_id = update.message.chat_id
+    waiting_key = f'waiting_url_{chat_id}'
+    if context.bot_data.get(waiting_key):
+        context.bot_data[waiting_key] = False
+        
+    keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text('Добавление ссылки отменено.', reply_markup=reply_markup)
+    logger.info("Добавление ссылки отменено")
+    return ConversationHandler.END
+
+@restricted
 def list_pages(update: Update, context: CallbackContext) -> None:
     pages = get_pages()
     if not pages:
@@ -268,6 +338,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
 
     display_pages_list(update)
 
+@restricted
 def update_page_cmd(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 2:
         update.message.reply_text('Использование: /update <ID> <ссылка>')
@@ -289,6 +360,7 @@ def update_page_cmd(update: Update, context: CallbackContext) -> None:
         logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
 
 # Обработчик нажатий на кнопки
+@restricted
 def button(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     query.answer()
@@ -301,12 +373,29 @@ def button(update: Update, context: CallbackContext) -> None:
         return
 
     if data == "add_url_button":
+        # Отправляем сообщение с запросом URL и кнопкой отмены
+        keyboard = [[InlineKeyboardButton("Отмена", callback_data="cancel_add")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
         context.bot.send_message(
             chat_id=query.message.chat_id,
-            text='Пришли мне ссылку для мониторинга:'
+            text='Пришли мне ссылку для мониторинга:',
+            reply_markup=reply_markup
         )
         logger.info("Отправлен запрос на ссылку после нажатия кнопки")
         context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
+        return
+        
+    if data == "cancel_add":
+        # Отмена добавления URL
+        chat_id = query.message.chat_id
+        waiting_key = f'waiting_url_{chat_id}'
+        if context.bot_data.get(waiting_key):
+            context.bot_data[waiting_key] = False
+        
+        # Возвращаемся к списку страниц
+        display_pages_list(query)
+        logger.info("Добавление ссылки отменено, возврат к списку страниц")
         return
 
     # Разбираем данные callback
@@ -362,6 +451,7 @@ def button(update: Update, context: CallbackContext) -> None:
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
 
 # Обработчик для текстовых сообщений
+@restricted
 def handle_text(update: Update, context: CallbackContext) -> None:
     chat_id = update.message.chat_id
     waiting_key = f'waiting_url_{chat_id}'
@@ -400,6 +490,9 @@ def handle_text(update: Update, context: CallbackContext) -> None:
             context.bot_data[waiting_key] = False
 
 def main() -> None:
+    global WHITELIST
+    WHITELIST = load_whitelist()
+    
     init_db()
     updater = Updater(BOT_TOKEN)
     dispatcher = updater.dispatcher
@@ -413,7 +506,7 @@ def main() -> None:
         states={
             WAITING_URL: [MessageHandler(Filters.text & ~Filters.command, add_url)],
         },
-        fallbacks=[CommandHandler("cancel", lambda update, context: ConversationHandler.END)],
+        fallbacks=[CommandHandler("cancel", cancel_add)],
     )
     dispatcher.add_handler(add_conversation)
     
@@ -439,4 +532,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
