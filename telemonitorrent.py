@@ -56,8 +56,7 @@ def init_db():
 def add_page(title, url):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)",
-                   (title, url))
+    cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)", (title, url))
     page_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -102,7 +101,7 @@ def update_page_date(page_id, new_date):
 
 # Функция для обновления времени последней проверки страницы в базе данных
 def update_last_checked(page_id):
-    last_checked = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    last_checked = datetime.now().strftime('%Y-%м-%д %H:%М:%S')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("UPDATE pages SET last_checked = ? WHERE id = ?", (last_checked, page_id))
@@ -220,7 +219,7 @@ def button(update: Update, context: CallbackContext) -> None:
 
     elif action == 'add_page':
         context.user_data['awaiting_url'] = True
-        query.edit_message_text(text='Пожалуйста, отправьте ссылку для мониторинга.')
+        query.edit_message_text(text='Пришли мне ссылку для мониторинга.')
         logger.info("Кнопка добавления страницы нажата")
 
 # Обработчик сообщений для получения ссылки
@@ -229,7 +228,9 @@ def handle_message(update: Update, context: CallbackContext) -> None:
         url = update.message.text
         title = rutracker_api.get_page_title(url)
         add_page(title, url)
-        update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
+        keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
         context.user_data['awaiting_url'] = False
         logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
 
@@ -282,6 +283,8 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
 
 
 
