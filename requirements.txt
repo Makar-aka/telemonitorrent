@@ -1,0 +1,4 @@
+python-telegram-bot==13.7
+schedule==1.1.0
+rutracker-api==0.2.0
+python-dotenv==0.19.2

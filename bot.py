@@ -1,11 +1,14 @@
 import schedule
 import time
+import logging
 from threading import Thread
 from telegram.ext import (
     Updater, CommandHandler, CallbackQueryHandler, MessageHandler,
     Filters, ConversationHandler
 )
 from rutracker_api import RutrackerAPI
+from dotenv import load_dotenv
+import os
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
@@ -18,6 +21,22 @@ from handlers import (
     update_page_cmd, check_now, toggle_subscription, subscription_status,
     list_users, make_admin, remove_admin, add_user_cmd, delete_user_cmd,
     user_help_cmd, button, handle_text, set_dependencies
+)
+
+# Загрузка переменных окружения из .env файла
+load_dotenv()
+
+LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
+LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format=LOG_FORMAT,
+    handlers=[
+        logging.FileHandler(LOG_FILE),
+        logging.StreamHandler()
+    ]
 )
 
 def main() -> None:
