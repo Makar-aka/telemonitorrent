@@ -44,6 +44,10 @@ logging.basicConfig(
     ]
 )
 
+# Пример логирования для проверки
+logger = logging.getLogger(__name__)
+logger.info("Логирование настроено")
+
 def main() -> None:
     check_required_env_vars()
     
@@ -116,4 +120,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
