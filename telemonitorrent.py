@@ -2,7 +2,7 @@ import os
 import sqlite3
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
 from dotenv import load_dotenv
 import schedule
 import time
@@ -101,7 +101,7 @@ def update_page_date(page_id, new_date):
 
 # Функция для обновления времени последней проверки страницы в базе данных
 def update_last_checked(page_id):
-    last_checked = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    last_checked = datetime.now().strftime('%Y-%m-%d %H:%М:%S')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("UPDATE pages SET last_checked = ? WHERE id = ?", (last_checked, page_id))
@@ -159,6 +159,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
         return
 
     keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
+    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_page")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
     logger.info("Команда /list выполнена")
@@ -213,7 +214,22 @@ def button(update: Update, context: CallbackContext) -> None:
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
 
     elif action == 'back_to_list':
-        list_pages(query, context)
+        list_pages(update, context)
+
+    elif action == 'add_page':
+        context.user_data['awaiting_url'] = True
+        query.edit_message_text(text='Пожалуйста, отправьте ссылку для мониторинга.')
+        logger.info("Кнопка добавления страницы нажата")
+
+# Обработчик сообщений для получения ссылки
+def handle_message(update: Update, context: CallbackContext) -> None:
+    if context.user_data.get('awaiting_url'):
+        url = update.message.text
+        title = rutracker_api.get_page_title(url)
+        add_page(title, url)
+        update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
+        context.user_data['awaiting_url'] = False
+        logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
@@ -244,6 +260,7 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("list", list_pages))
     dispatcher.add_handler(CommandHandler("update", update_page))
     dispatcher.add_handler(CallbackQueryHandler(button))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
     # Запуск планировщика задач
     schedule.every(CHECK_INTERVAL).minutes.do(check_pages)
@@ -263,6 +280,8 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
 
 
 
