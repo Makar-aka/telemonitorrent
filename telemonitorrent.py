@@ -506,7 +506,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
 
     display_pages_list(update)
 
-@restricted
+@admin_required
 def update_page_cmd(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 2:
         update.message.reply_text('Использование: /update <ID> <ссылка>')
@@ -532,7 +532,7 @@ def update_page_cmd(update: Update, context: CallbackContext) -> None:
         logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
 
 # Команда для запуска проверки вручную
-@restricted
+@admin_required
 def check_now(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Запускаю проверку страниц на обновления...')
     
@@ -745,8 +745,6 @@ def admin_help_cmd(update: Update, context: CallbackContext) -> None:
     help_text += "/start - Начало работы с ботом\n"
     help_text += "/list - Показать список отслеживаемых страниц\n"
     help_text += "/add [ссылка] - Добавить страницу для мониторинга\n"
-    help_text += "/update [ID] [ссылка] - Обновить ссылку для страницы\n"
-    help_text += "/check - Запустить проверку обновлений вручную\n"
     help_text += "/subscribe - Включить/выключить уведомления\n"
     help_text += "/status - Показать ваш статус и настройки\n\n"
     
@@ -789,8 +787,6 @@ def user_help_cmd(update: Update, context: CallbackContext) -> None:
     help_text += "/start - Начало работы с ботом\n"
     help_text += "/list - Показать список отслеживаемых страниц\n"
     help_text += "/add [ссылка] - Добавить страницу для мониторинга\n"
-    help_text += "/update [ID] [ссылка] - Обновить ссылку для страницы\n"
-    help_text += "/check - Запустить проверку обновлений вручную\n"
     help_text += "/subscribe - Включить/выключить уведомления\n"
     help_text += "/status - Показать ваш статус и настройки\n"
     help_text += "/help - Показать этот список команд"
