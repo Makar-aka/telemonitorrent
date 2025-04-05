@@ -164,7 +164,7 @@ def list_pages(update: Update, context: CallbackContext) -> None:
         return ConversationHandler.END
 
     keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
-    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_page")])
+    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
     logger.info("Команда /list выполнена")
@@ -255,16 +255,18 @@ def button(update: Update, context: CallbackContext) -> None:
         pages = get_pages()
         if pages:
             keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
-        keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_page")])
+        keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         query.edit_message_text(text='Страницы для мониторинга:', reply_markup=reply_markup)
         logger.info("Возврат к списку страниц")
 
-    elif action == 'add_page':
+    elif action == 'add_url':
         query.edit_message_text(text='Пришли мне ссылку для мониторинга.')
         logger.info("Кнопка добавления страницы нажата, ожидание ссылки")
         # Используем хранилище user_data для пометки, что пользователь находится в режиме ожидания ссылки
+        user_id = query.from_user.id
         context.user_data['awaiting_url'] = True
+        logger.debug(f"Установлен флаг ожидания URL для пользователя {user_id}")
 
 # Обработчик сообщений для получения ссылки
 def handle_message(update: Update, context: CallbackContext) -> None:
@@ -350,6 +352,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
