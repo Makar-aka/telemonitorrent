@@ -170,6 +170,17 @@ def check_pages():
 def display_pages_list(update_or_query):
     keyboard = []
     pages = get_pages()
+    
+    # Формируем заголовок с информацией о периодичности проверки
+    if CHECK_INTERVAL == 1:
+        interval_text = "каждую минуту"
+    elif CHECK_INTERVAL < 5:
+        interval_text = f"каждые {CHECK_INTERVAL} минуты"
+    else:
+        interval_text = f"каждые {CHECK_INTERVAL} минут"
+    
+    title_text = f'Страницы для мониторинга (проверка {interval_text}):'
+    
     if pages:
         keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
     keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
@@ -177,10 +188,10 @@ def display_pages_list(update_or_query):
     
     if isinstance(update_or_query, Update):
         # Это новое сообщение
-        update_or_query.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
+        update_or_query.message.reply_text(title_text, reply_markup=reply_markup)
     else:
         # Это обновление существующего сообщения
-        update_or_query.edit_message_text(text='Страницы для мониторинга:', reply_markup=reply_markup)
+        update_or_query.edit_message_text(text=title_text, reply_markup=reply_markup)
     
     logger.info("Список страниц отображен")
 
@@ -410,3 +421,31 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
