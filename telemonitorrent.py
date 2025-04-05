@@ -56,7 +56,8 @@ def init_db():
 def add_page(title, url):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)", (title, url))
+    cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)",
+                   (title, url))
     page_id = cursor.lastrowid
     conn.commit()
     conn.close()
@@ -101,7 +102,7 @@ def update_page_date(page_id, new_date):
 
 # Функция для обновления времени последней проверки страницы в базе данных
 def update_last_checked(page_id):
-    last_checked = datetime.now().strftime('%Y-%m-%d %H:%М:%S')
+    last_checked = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("UPDATE pages SET last_checked = ? WHERE id = ?", (last_checked, page_id))
@@ -170,6 +171,7 @@ def button(update: Update, context: CallbackContext) -> None:
     query.answer()
     data = query.data.split('_')
     action = data[0]
+    logger.debug(f"Обработка действия: {action}")
 
     if action == 'page':
         page_id = int(data[1])
