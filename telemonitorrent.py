@@ -15,7 +15,7 @@ load_dotenv()
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
+LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levellevel)s - %(message)s')
 USE_PROXY = os.getenv('USE_PROXY', 'False').lower() == 'true'
 HTTP_PROXY = os.getenv('HTTP_PROXY')
 HTTPS_PROXY = os.getenv('HTTPS_PROXY')
@@ -57,9 +57,20 @@ def add_page(title, url):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)", (title, url))
+    page_id = cursor.lastrowid
     conn.commit()
     conn.close()
     logger.info(f"Страница {title} добавлена для мониторинга")
+
+    # Загрузка торрент-файла при добавлении новой страницы
+    page_content = rutracker_api.get_page_content(url)
+    new_date = rutracker_api.parse_date(page_content)
+    if new_date:
+        torrent_file_path = os.path.join(FILE_DIR, f'{page_id}.torrent')
+        rutracker_api.download_torrent_by_url(url, torrent_file_path)
+        update_page_date(page_id, new_date)
+        logger.info(f"Торрент-файл для новой страницы {title} скачан в {torrent_file_path}")
+    update_last_checked(page_id)
 
 # Функция для получения списка страниц из базы данных
 def get_pages():
@@ -115,9 +126,8 @@ def check_pages():
         page_content = rutracker_api.get_page_content(url)
         new_date = rutracker_api.parse_date(page_content)
         if new_date and new_date != old_date:
-            torrent_url = 'URL_ТОРРЕНТ_ФАЙЛА'  # Замените на URL торрент-файла
-            torrent_file_path = os.path.join(FILE_DIR, f'{page_id}.torrent')  # Замените на путь к торрент-файлу
-            rutracker_api.download_torrent_file(torrent_url, torrent_file_path)
+            torrent_file_path = os.path.join(FILE_DIR, f'{page_id}.torrent')
+            rutracker_api.download_torrent_by_url(url, torrent_file_path)
             update_page_date(page_id, new_date)
             logger.info(f"Дата для страницы {title} обновлена и торрент-файл скачан в {torrent_file_path}")
         update_last_checked(page_id)

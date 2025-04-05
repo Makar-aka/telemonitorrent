@@ -102,4 +102,38 @@ class RutrackerAPI:
         page_content = self.get_page_content(url)
         return self.parse_date(page_content)
 
+    def download_torrent_by_url(self, page_url, file_path):
+        if not self.login():
+            return None
+
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+
+        try:
+            response = self.session.get(page_url, headers=headers, proxies=self.proxies)
+            if response.status_code != 200:
+                logger.error(f"Ошибка при загрузке страницы: {response.status_code}")
+                return None
+
+            soup = BeautifulSoup(response.text, "html.parser")
+            download_link_element = soup.select_one("a[href*='dl.php?t=']")
+            if not download_link_element:
+                logger.error("Ссылка на загрузку торрента не найдена")
+                return None
+
+            download_url = self.base_url + download_link_element["href"]
+            torrent_response = self.session.get(download_url, headers=headers, proxies=self.proxies, stream=True)
+            if torrent_response.status_code == 200:
+                with open(file_path, 'wb') as file:
+                    for chunk in torrent_response.iter_content(chunk_size=8192):
+                        file.write(chunk)
+                logger.info(f"Торрент-файл скачан и сохранен в {file_path}")
+                return file_path
+            else:
+                logger.error(f"Ошибка при загрузке торрента: {torrent_response.status_code}")
+                return None
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке торрента по ссылке: {e}")
+            return None
+
+
 
