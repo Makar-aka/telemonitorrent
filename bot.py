@@ -35,17 +35,23 @@ if not os.path.exists(LOG_FILE):
         pass
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format=LOG_FORMAT,
-    handlers=[
-        logging.FileHandler(LOG_FILE),
-        logging.StreamHandler()
-    ]
-)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
+# Создание обработчиков
+file_handler = logging.FileHandler(LOG_FILE)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+stream_handler = logging.StreamHandler()
+stream_handler.setLevel(logging.INFO)
+stream_handler.setFormatter(logging.Formatter(LOG_FORMAT))
+
+# Добавление обработчиков к логгеру
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
 
 # Пример логирования для проверки
-logger = logging.getLogger(__name__)
 logger.info("Логирование настроено")
 
 def main() -> None:
@@ -120,3 +126,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
