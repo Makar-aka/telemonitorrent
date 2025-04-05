@@ -12,77 +12,140 @@ import time
 from threading import Thread
 import logging
 from rutracker_api import RutrackerAPI
+import sys
 
 # Состояния для ConversationHandler
 WAITING_URL = 1
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
-CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
-BOT_TOKEN = os.getenv('BOT_TOKEN')
-LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
-RUTRACKER_USERNAME = os.getenv('RUTRACKER_USERNAME')
-RUTRACKER_PASSWORD = os.getenv('RUTRACKER_PASSWORD')
-FILE_DIR = os.getenv('FILE_DIR')
-WHITELIST_PATH = os.getenv('WHITELIST_PATH', 'whitelist.txt')
-NOTIFICATIONS_ENABLED = os.getenv('NOTIFICATIONS_ENABLED', 'True').lower() == 'true'
+CHECK_INTERVAL = int(os.environ['CHECK_INTERVAL'])
+BOT_TOKEN = os.environ['BOT_TOKEN']
+LOG_LEVEL = os.environ['LOG_LEVEL']
+LOG_FORMAT = os.environ['LOG_FORMAT']
+RUTRACKER_USERNAME = os.environ['RUTRACKER_USERNAME']
+RUTRACKER_PASSWORD = os.environ['RUTRACKER_PASSWORD']
+FILE_DIR = os.environ['FILE_DIR']
+NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'True').lower() == 'true'
 
 # Настройка логирования
 logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
-# Путь к базе данных SQLite
+# Пути к базам данных SQLite
 db_path = 'database.db'
+users_db_path = 'users.db'
 
 # Инициализация RutrackerAPI
 rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
 
-# Загрузка белого списка пользователей
-def load_whitelist():
-    whitelist = set()
-    if os.path.exists(WHITELIST_PATH):
-        with open(WHITELIST_PATH, 'r') as file:
-            for line in file:
-                line = line.strip()
-                if line and not line.startswith('#'):
-                    try:
-                        user_id = int(line)
-                        whitelist.add(user_id)
-                    except ValueError:
-                        logger.warning(f"Некорректный ID пользователя в файле whitelist: {line}")
-    else:
-        # Создаем пустой файл whitelist.txt
-        with open(WHITELIST_PATH, 'w') as file:
-            file.write("# Добавьте ID пользователей по одному на строку\n")
-        logger.warning(f"Файл белого списка не найден, создан пустой файл: {WHITELIST_PATH}")
-    
-    logger.info(f"Загружен белый список: {len(whitelist)} пользователей")
-    return whitelist
+# Функция для инициализации базы данных пользователей
+def init_users_db():
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute('''CREATE TABLE IF NOT EXISTS users (
+                        id INTEGER PRIMARY KEY,
+                        is_admin INTEGER DEFAULT 0,
+                        sub INTEGER DEFAULT 1)''')
+    conn.commit()
+    conn.close()
+    logger.info("База данных пользователей инициализирована")
 
-# Проверка доступа пользователя
+# Функция для проверки наличия пользователя в базе данных
+def user_exists(user_id):
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, is_admin, sub FROM users WHERE id = ?", (user_id,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+# Функция для добавления пользователя в базу данных
+def add_user(user_id, is_admin=0, sub=1):
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute("INSERT OR REPLACE INTO users (id, is_admin, sub) VALUES (?, ?, ?)", 
+                   (user_id, is_admin, sub))
+    conn.commit()
+    conn.close()
+    logger.info(f"Пользователь {user_id} добавлен в базу данных")
+
+# Функция для обновления статуса администратора пользователя
+def update_user_admin(user_id, is_admin):
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_admin = ? WHERE id = ?", (is_admin, user_id))
+    conn.commit()
+    conn.close()
+    logger.info(f"Статус администратора пользователя {user_id} обновлен на {is_admin}")
+
+# Функция для обновления статуса подписки пользователя
+def update_user_sub(user_id, sub):
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET sub = ? WHERE id = ?", (sub, user_id))
+    conn.commit()
+    conn.close()
+    logger.info(f"Статус подписки пользователя {user_id} обновлен на {sub}")
+
+# Функция для получения всех пользователей
+def get_users():
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, is_admin, sub FROM users")
+    users = cursor.fetchall()
+    conn.close()
+    return users
+
+# Функция для удаления пользователя
+def delete_user(user_id):
+    conn = sqlite3.connect(users_db_path)
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    logger.info(f"Пользователь {user_id} удален из базы данных")
+
+# Функция для проверки доступа пользователя
 def check_user_access(update: Update) -> bool:
     user_id = update.effective_user.id
-    if user_id in WHITELIST:
+    user_data = user_exists(user_id)
+    
+    if user_data:
         return True
     
+    # Если пользователя нет в базе, добавляем его с ограниченными правами
     username = update.effective_user.username or "Не указано"
     first_name = update.effective_user.first_name or "Не указано"
     last_name = update.effective_user.last_name or "Не указано"
     
-    logger.warning(
-        f"Попытка доступа от неавторизованного пользователя: ID={user_id}, "
+    # Добавляем первого пользователя как администратора
+    is_first_user = len(get_users()) == 0
+    is_admin = 1 if is_first_user else 0
+    
+    add_user(user_id, is_admin=is_admin)
+    logger.info(
+        f"Новый пользователь добавлен: ID={user_id}, Admin={is_admin}, "
         f"Username={username}, Name={first_name} {last_name}"
     )
     
+    return True
+
+# Функция для проверки прав администратора
+def check_admin_access(update: Update) -> bool:
+    user_id = update.effective_user.id
+    user_data = user_exists(user_id)
+    
+    if user_data and user_data[1] == 1:  # is_admin = 1
+        return True
+    
     update.message.reply_text(
-        'Извините, у вас нет доступа к этому боту. '
-        'Пожалуйста, свяжитесь с администратором.'
+        'У вас нет прав администратора для выполнения этой команды.'
     )
     return False
 
-# Функция для отправки уведомлений всем пользователям в белом списке
-def send_notification_to_all_users(bot, message, keyboard=None):
+# Функция для отправки уведомлений всем пользователям с подпиской
+def send_notification_to_subscribers(bot, message, keyboard=None):
     if not NOTIFICATIONS_ENABLED:
         logger.info("Уведомления отключены в настройках")
         return
@@ -91,8 +154,11 @@ def send_notification_to_all_users(bot, message, keyboard=None):
     if keyboard:
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+    users = get_users()
+    subscribers = [user[0] for user in users if user[2] == 1]  # id где sub = 1
+    
     success_count = 0
-    for user_id in WHITELIST:
+    for user_id in subscribers:
         try:
             bot.send_message(
                 chat_id=user_id,
@@ -104,9 +170,9 @@ def send_notification_to_all_users(bot, message, keyboard=None):
         except Exception as e:
             logger.error(f"Ошибка при отправке уведомления пользователю {user_id}: {e}")
     
-    logger.info(f"Отправлено уведомлений: {success_count} из {len(WHITELIST)}")
+    logger.info(f"Отправлено уведомлений: {success_count} из {len(subscribers)}")
 
-# Функция для инициализации базы данных
+# Функция для инициализации базы данных страниц
 def init_db():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -122,7 +188,7 @@ def init_db():
         cursor.execute("ALTER TABLE pages ADD COLUMN last_checked TEXT")
     conn.commit()
     conn.close()
-    logger.info("База данных инициализирована")
+    logger.info("База данных страниц инициализирована")
 
 # Функция для проверки наличия URL в базе данных
 def url_exists(url):
@@ -177,7 +243,7 @@ def add_page(title, url):
     
     return page_id, title, None
 
-# Базовые функции для работы с БД
+# Базовые функции для работы с БД страниц
 def get_pages():
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
@@ -265,8 +331,8 @@ def check_pages():
                 [InlineKeyboardButton("Посмотреть список", callback_data="back_to_list")]
             ]
             
-            # Отправляем уведомление всем пользователям в белом списке
-            send_notification_to_all_users(BOT, notification_message, keyboard)
+            # Отправляем уведомление подписчикам
+            send_notification_to_subscribers(BOT, notification_message, keyboard)
             
         update_last_checked(page_id)
     
@@ -313,11 +379,20 @@ def display_pages_list(update_or_query):
     
     logger.info("Список страниц отображен")
 
-
-# Декоратор для проверки доступа
+# Декоратор для проверки базового доступа
 def restricted(func):
     def wrapped(update, context, *args, **kwargs):
         if not check_user_access(update):
+            return
+        return func(update, context, *args, **kwargs)
+    return wrapped
+
+# Декоратор для проверки прав администратора
+def admin_required(func):
+    def wrapped(update, context, *args, **kwargs):
+        if not check_user_access(update):
+            return
+        if not check_admin_access(update):
             return
         return func(update, context, *args, **kwargs)
     return wrapped
@@ -465,6 +540,114 @@ def check_now(update: Update, context: CallbackContext) -> None:
     
     logger.info("Запущена ручная проверка страниц")
 
+# Команда для управления подпиской
+@restricted
+def toggle_subscription(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    user_data = user_exists(user_id)
+    
+    if not user_data:
+        add_user(user_id)
+        update.message.reply_text('Вы подписаны на уведомления об обновлениях.')
+        logger.info(f"Пользователь {user_id} подписался на уведомления")
+        return
+    
+    # Меняем статус подписки на противоположный
+    current_sub = user_data[2]
+    new_sub = 0 if current_sub == 1 else 1
+    
+    update_user_sub(user_id, new_sub)
+    
+    if new_sub == 1:
+        update.message.reply_text('Вы подписаны на уведомления об обновлениях.')
+        logger.info(f"Пользователь {user_id} подписался на уведомления")
+    else:
+        update.message.reply_text('Вы отписались от уведомлений об обновлениях.')
+        logger.info(f"Пользователь {user_id} отписался от уведомлений")
+
+# Команда для отображения статуса подписки
+@restricted
+def subscription_status(update: Update, context: CallbackContext) -> None:
+    user_id = update.effective_user.id
+    user_data = user_exists(user_id)
+    
+    if not user_data:
+        add_user(user_id)
+        update.message.reply_text('Вы подписаны на уведомления об обновлениях.')
+        return
+    
+    is_admin = user_data[1]
+    is_subscribed = user_data[2]
+    
+    status_text = f'Ваш ID: {user_id}\n'
+    status_text += f'Статус администратора: {"Да" if is_admin else "Нет"}\n'
+    status_text += f'Подписка на уведомления: {"Включена" if is_subscribed else "Отключена"}'
+    
+    update.message.reply_text(status_text)
+
+# Команда для администратора - список пользователей
+@admin_required
+def list_users(update: Update, context: CallbackContext) -> None:
+    users = get_users()
+    
+    if not users:
+        update.message.reply_text('Нет зарегистрированных пользователей.')
+        return
+    
+    users_text = 'Список пользователей:\n\n'
+    for user in users:
+        user_id, is_admin, is_subscribed = user
+        users_text += f'ID: {user_id}, Админ: {"Да" if is_admin else "Нет"}, Подписка: {"Да" if is_subscribed else "Нет"}\n'
+    
+    update.message.reply_text(users_text)
+
+# Команда для администратора - назначение админа
+@admin_required
+def make_admin(update: Update, context: CallbackContext) -> None:
+    if len(context.args) != 1:
+        update.message.reply_text('Использование: /makeadmin <ID>')
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        
+        user_data = user_exists(target_id)
+        if not user_data:
+            update.message.reply_text(f'Пользователь с ID {target_id} не найден.')
+            return
+        
+        update_user_admin(target_id, 1)
+        update.message.reply_text(f'Пользователю с ID {target_id} предоставлены права администратора.')
+        logger.info(f"Пользователю {target_id} предоставлены права администратора")
+    except ValueError:
+        update.message.reply_text('ID пользователя должен быть числом.')
+
+# Команда для администратора - удаление админа
+@admin_required
+def remove_admin(update: Update, context: CallbackContext) -> None:
+    if len(context.args) != 1:
+        update.message.reply_text('Использование: /removeadmin <ID>')
+        return
+    
+    try:
+        target_id = int(context.args[0])
+        
+        # Проверка, не пытается ли админ удалить сам себя
+        if target_id == update.effective_user.id:
+            update.message.reply_text('Нельзя удалить права администратора у самого себя.')
+            return
+        
+        user_data = user_exists(target_id)
+        if not user_data:
+            update.message.reply_text(f'Пользователь с ID {target_id} не найден.')
+            return
+        
+        update_user_admin(target_id, 0)
+        update.message.reply_text(f'У пользователя с ID {target_id} удалены права администратора.')
+        logger.info(f"У пользователя {target_id} удалены права администратора")
+    except ValueError:
+        update.message.reply_text('ID пользователя должен быть числом.')
+
 # Обработчик нажатий на кнопки
 @restricted
 def button(update: Update, context: CallbackContext) -> None:
@@ -598,11 +781,27 @@ def handle_text(update: Update, context: CallbackContext) -> None:
             update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
             context.bot_data[waiting_key] = False
 
-def main() -> None:
-    global WHITELIST, BOT
-    WHITELIST = load_whitelist()
+def check_required_env_vars():
+    required_vars = ['CHECK_INTERVAL', 'BOT_TOKEN', 'LOG_LEVEL', 'LOG_FORMAT', 
+                    'RUTRACKER_USERNAME', 'RUTRACKER_PASSWORD', 'FILE_DIR']
+    missing_vars = [var for var in required_vars if var not in os.environ]
     
+    if missing_vars:
+        print("ОШИБКА: Отсутствуют обязательные переменные окружения:")
+        for var in missing_vars:
+            print(f" - {var}")
+        print("\nДобавьте их в файл .env или установите в окружении.")
+        sys.exit(1)
+
+def main() -> None:
+    check_required_env_vars()
+    
+    global BOT
+    
+    # Инициализация баз данных
     init_db()
+    init_users_db()
+    
     updater = Updater(BOT_TOKEN)
     BOT = updater.bot
     dispatcher = updater.dispatcher
@@ -623,6 +822,16 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("list", list_pages))
     dispatcher.add_handler(CommandHandler("update", update_page_cmd))
     dispatcher.add_handler(CommandHandler("check", check_now))
+    
+    # Команды для управления подписками
+    dispatcher.add_handler(CommandHandler("subscribe", toggle_subscription))
+    dispatcher.add_handler(CommandHandler("status", subscription_status))
+    
+    # Административные команды
+    dispatcher.add_handler(CommandHandler("users", list_users))
+    dispatcher.add_handler(CommandHandler("makeadmin", make_admin))
+    dispatcher.add_handler(CommandHandler("removeadmin", remove_admin))
+    
     dispatcher.add_handler(CallbackQueryHandler(button))
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
 
@@ -643,5 +852,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
 
