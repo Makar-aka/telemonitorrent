@@ -77,7 +77,7 @@ def start(update: Update, context: CallbackContext) -> None:
     
     welcome_message = ('Привет! Я могу промониторить раздачи на рутрекере, чтобы ты ничего не пропустил! '
                       'Добавь в меня ссылку на сериал, я предупрежу тебя о новых сериях и скачаю его обновления на диск! '
-                      'подробности в /help')
+                      '\nПодробности в /help')
     
     keyboard = [
         [InlineKeyboardButton("Список", callback_data="back_to_list"), 
