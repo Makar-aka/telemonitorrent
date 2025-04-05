@@ -2,7 +2,10 @@ import os
 import sqlite3
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
+from telegram.ext import (
+    Updater, CommandHandler, CallbackQueryHandler, MessageHandler,
+    Filters, CallbackContext, ConversationHandler
+)
 from dotenv import load_dotenv
 import schedule
 import time
@@ -139,45 +142,23 @@ def check_pages():
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Привет! Используйте /add <ссылка> для добавления страницы и /list для просмотра страниц.')
     logger.info("Команда /start выполнена")
-    return ConversationHandler.END
 
-# Обработчик команды /add
-def add(update: Update, context: CallbackContext) -> None:
-    if len(context.args) != 1:
-        update.message.reply_text('Использование: /add <ссылка>')
-        logger.warning("Неправильное использование команды /add")
-        return ConversationHandler.END
-
+# Обработчик команды /add с одним аргументом
+def add_with_arg(update: Update, context: CallbackContext) -> None:
     url = context.args[0]
     title = rutracker_api.get_page_title(url)
     add_page(title, url)
     update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
     logger.info(f"Команда /add выполнена для URL: {url}")
-    return ConversationHandler.END
 
-# Обработчик команды /list
-def list_pages(update: Update, context: CallbackContext) -> None:
-    pages = get_pages()
-    if not pages:
-        update.message.reply_text('Нет страниц для мониторинга.')
-        logger.info("Команда /list выполнена: нет страниц для мониторинга")
-        return ConversationHandler.END
-
-    keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
-    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url")])
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
-    logger.info("Команда /list выполнена")
-    return ConversationHandler.END
-
-# Функция для запроса URL
-def request_url(update: Update, context: CallbackContext) -> int:
+# Обработчик команды /add без аргументов - начало диалога добавления
+def add_start(update: Update, context: CallbackContext) -> int:
     update.message.reply_text('Пришли мне ссылку для мониторинга:')
     logger.info("Запрос ссылки отправлен")
     return WAITING_URL
 
-# Функция для получения URL
-def receive_url(update: Update, context: CallbackContext) -> int:
+# Обработчик для получения ссылки
+def add_url(update: Update, context: CallbackContext) -> int:
     url = update.message.text
     logger.debug(f"Получена ссылка: {url}")
     
@@ -199,6 +180,20 @@ def receive_url(update: Update, context: CallbackContext) -> int:
         update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
     
     return ConversationHandler.END
+
+# Обработчик команды /list
+def list_pages(update: Update, context: CallbackContext) -> None:
+    pages = get_pages()
+    if not pages:
+        update.message.reply_text('Нет страниц для мониторинга.')
+        logger.info("Команда /list выполнена: нет страниц для мониторинга")
+        return
+
+    keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
+    keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
+    logger.info("Команда /list выполнена")
 
 # Обработчик нажатий на кнопки
 def button(update: Update, context: CallbackContext) -> None:
@@ -255,49 +250,22 @@ def button(update: Update, context: CallbackContext) -> None:
         pages = get_pages()
         if pages:
             keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
-        keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url")])
+        keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
         reply_markup = InlineKeyboardMarkup(keyboard)
         query.edit_message_text(text='Страницы для мониторинга:', reply_markup=reply_markup)
         logger.info("Возврат к списку страниц")
 
-    elif action == 'add_url':
-        query.edit_message_text(text='Пришли мне ссылку для мониторинга.')
-        logger.info("Кнопка добавления страницы нажата, ожидание ссылки")
-        # Используем хранилище user_data для пометки, что пользователь находится в режиме ожидания ссылки
-        user_id = query.from_user.id
-        context.user_data['awaiting_url'] = True
-        logger.debug(f"Установлен флаг ожидания URL для пользователя {user_id}")
-
-# Обработчик сообщений для получения ссылки
-def handle_message(update: Update, context: CallbackContext) -> None:
-    logger.debug(f"Получено сообщение: {update.message.text}")
-    logger.debug(f"Состояние context.user_data: {context.user_data}")
-    
-    if context.user_data.get('awaiting_url'):
-        url = update.message.text
-        logger.debug(f"Обработка ссылки: {url}")
-        
-        try:
-            title = rutracker_api.get_page_title(url)
-            logger.debug(f"Получен заголовок: {title}")
-            
-            add_page(title, url)
-            logger.debug("Страница добавлена в базу данных")
-            
-            keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
-            logger.debug("Отправлено подтверждение добавления")
-            
-            # Сбросить флаг ожидания URL
-            context.user_data['awaiting_url'] = False
-            logger.debug("Флаг ожидания URL сброшен")
-            
-            logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
-        except Exception as e:
-            logger.error(f"Ошибка при обработке ссылки: {e}")
-            update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
-            context.user_data['awaiting_url'] = False
+    elif action == 'add':
+        if data[1] == 'url':
+            if data[2] == 'button':
+                # Отправляем новое сообщение для запроса URL
+                context.bot.send_message(
+                    chat_id=query.message.chat_id,
+                    text='Пришли мне ссылку для мониторинга:'
+                )
+                logger.info("Отправлен запрос на ссылку после нажатия кнопки")
+                # Сохраняем в контексте информацию о запросе URL
+                context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
@@ -312,6 +280,38 @@ def update_page(update: Update, context: CallbackContext) -> None:
     update.message.reply_text(f'Ссылка для страницы с ID {page_id} обновлена.')
     logger.info(f"Команда /update выполнена для страницы с ID {page_id}")
 
+# Обработчик для текстовых сообщений
+def handle_text(update: Update, context: CallbackContext) -> None:
+    # Проверяем, ожидаем ли мы URL от этого пользователя
+    chat_id = update.message.chat_id
+    waiting_key = f'waiting_url_{chat_id}'
+    
+    if context.bot_data.get(waiting_key):
+        url = update.message.text
+        logger.debug(f"Получена ссылка: {url}")
+        
+        try:
+            title = rutracker_api.get_page_title(url)
+            logger.debug(f"Получен заголовок: {title}")
+            
+            add_page(title, url)
+            logger.debug("Страница добавлена в базу данных")
+            
+            keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
+            logger.debug("Отправлено подтверждение добавления")
+            
+            # Сбрасываем флаг ожидания
+            context.bot_data[waiting_key] = False
+            logger.debug(f"Сброшен флаг ожидания URL для чата {chat_id}")
+            
+            logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
+        except Exception as e:
+            logger.error(f"Ошибка при обработке ссылки: {e}")
+            update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
+            context.bot_data[waiting_key] = False
+
 def main() -> None:
     # Инициализация базы данных
     init_db()
@@ -322,9 +322,21 @@ def main() -> None:
     # Получение диспетчера для регистрации обработчиков
     dispatcher = updater.dispatcher
 
+    # Регистрация обработчика /add с аргументами
+    dispatcher.add_handler(CommandHandler("add", add_with_arg, pass_args=True))
+    
+    # Регистрация обработчика диалога добавления страницы
+    add_conversation = ConversationHandler(
+        entry_points=[CommandHandler("add", add_start, filters=Filters.command & ~Filters.regex(r'^/add\s+\S+'))],
+        states={
+            WAITING_URL: [MessageHandler(Filters.text & ~Filters.command, add_url)],
+        },
+        fallbacks=[CommandHandler("cancel", lambda update, context: ConversationHandler.END)],
+    )
+    dispatcher.add_handler(add_conversation)
+    
     # Регистрация обработчиков команд
     dispatcher.add_handler(CommandHandler("start", start))
-    dispatcher.add_handler(CommandHandler("add", add))
     dispatcher.add_handler(CommandHandler("list", list_pages))
     dispatcher.add_handler(CommandHandler("update", update_page))
     
@@ -332,7 +344,7 @@ def main() -> None:
     dispatcher.add_handler(CallbackQueryHandler(button))
     
     # Обработчик для текстовых сообщений
-    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
+    dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
 
     # Запуск планировщика задач
     schedule.every(CHECK_INTERVAL).minutes.do(check_pages)
@@ -352,6 +364,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
