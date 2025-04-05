@@ -2,13 +2,16 @@ import os
 import sqlite3
 from datetime import datetime
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext
+from telegram.ext import Updater, CommandHandler, CallbackQueryHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from dotenv import load_dotenv
 import schedule
 import time
 from threading import Thread
 import logging
 from rutracker_api import RutrackerAPI
+
+# Состояния для ConversationHandler
+WAITING_URL = 1
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
@@ -136,19 +139,21 @@ def check_pages():
 def start(update: Update, context: CallbackContext) -> None:
     update.message.reply_text('Привет! Используйте /add <ссылка> для добавления страницы и /list для просмотра страниц.')
     logger.info("Команда /start выполнена")
+    return ConversationHandler.END
 
 # Обработчик команды /add
 def add(update: Update, context: CallbackContext) -> None:
     if len(context.args) != 1:
         update.message.reply_text('Использование: /add <ссылка>')
         logger.warning("Неправильное использование команды /add")
-        return
+        return ConversationHandler.END
 
     url = context.args[0]
     title = rutracker_api.get_page_title(url)
     add_page(title, url)
     update.message.reply_text(f'Страница {title} добавлена для мониторинга.')
     logger.info(f"Команда /add выполнена для URL: {url}")
+    return ConversationHandler.END
 
 # Обработчик команды /list
 def list_pages(update: Update, context: CallbackContext) -> None:
@@ -156,13 +161,44 @@ def list_pages(update: Update, context: CallbackContext) -> None:
     if not pages:
         update.message.reply_text('Нет страниц для мониторинга.')
         logger.info("Команда /list выполнена: нет страниц для мониторинга")
-        return
+        return ConversationHandler.END
 
     keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
     keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_page")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('Страницы для мониторинга:', reply_markup=reply_markup)
     logger.info("Команда /list выполнена")
+    return ConversationHandler.END
+
+# Функция для запроса URL
+def request_url(update: Update, context: CallbackContext) -> int:
+    update.message.reply_text('Пришли мне ссылку для мониторинга:')
+    logger.info("Запрос ссылки отправлен")
+    return WAITING_URL
+
+# Функция для получения URL
+def receive_url(update: Update, context: CallbackContext) -> int:
+    url = update.message.text
+    logger.debug(f"Получена ссылка: {url}")
+    
+    try:
+        title = rutracker_api.get_page_title(url)
+        logger.debug(f"Получен заголовок: {title}")
+        
+        add_page(title, url)
+        logger.debug("Страница добавлена в базу данных")
+        
+        keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
+        logger.debug("Отправлено подтверждение добавления")
+        
+        logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
+    except Exception as e:
+        logger.error(f"Ошибка при обработке ссылки: {e}")
+        update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
+    
+    return ConversationHandler.END
 
 # Обработчик нажатий на кнопки
 def button(update: Update, context: CallbackContext) -> None:
@@ -215,23 +251,20 @@ def button(update: Update, context: CallbackContext) -> None:
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
 
     elif action == 'back_to_list':
-        list_pages(update, context)
+        keyboard = []
+        pages = get_pages()
+        if pages:
+            keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
+        keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_page")])
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        query.edit_message_text(text='Страницы для мониторинга:', reply_markup=reply_markup)
+        logger.info("Возврат к списку страниц")
 
     elif action == 'add_page':
-        # Устанавливаем флаг для ожидания URL
-        if 'user_id' not in context.user_data:
-            context.user_data['user_id'] = query.from_user.id
+        query.edit_message_text(text='Пришли мне ссылку для мониторинга.')
+        logger.info("Кнопка добавления страницы нажата, ожидание ссылки")
+        # Используем хранилище user_data для пометки, что пользователь находится в режиме ожидания ссылки
         context.user_data['awaiting_url'] = True
-        logger.info(f"Установлен флаг ожидания URL для пользователя {query.from_user.id}")
-        
-        # Отправляем новое сообщение, вместо изменения текущего
-        # Это нужно, чтобы пользователь мог видеть предыдущее сообщение
-        bot = context.bot
-        bot.send_message(
-            chat_id=query.message.chat_id,
-            text='Пришли мне ссылку для мониторинга.'
-        )
-        logger.info("Кнопка добавления страницы нажата, отправлен запрос на ссылку")
 
 # Обработчик сообщений для получения ссылки
 def handle_message(update: Update, context: CallbackContext) -> None:
@@ -239,9 +272,8 @@ def handle_message(update: Update, context: CallbackContext) -> None:
     logger.debug(f"Состояние context.user_data: {context.user_data}")
     
     if context.user_data.get('awaiting_url'):
-        logger.debug("Обработка ссылки для мониторинга")
         url = update.message.text
-        logger.debug(f"Получена ссылка: {url}")
+        logger.debug(f"Обработка ссылки: {url}")
         
         try:
             title = rutracker_api.get_page_title(url)
@@ -255,6 +287,7 @@ def handle_message(update: Update, context: CallbackContext) -> None:
             update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
             logger.debug("Отправлено подтверждение добавления")
             
+            # Сбросить флаг ожидания URL
             context.user_data['awaiting_url'] = False
             logger.debug("Флаг ожидания URL сброшен")
             
@@ -292,7 +325,11 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler("add", add))
     dispatcher.add_handler(CommandHandler("list", list_pages))
     dispatcher.add_handler(CommandHandler("update", update_page))
+    
+    # Обработчик для кнопок
     dispatcher.add_handler(CallbackQueryHandler(button))
+    
+    # Обработчик для текстовых сообщений
     dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_message))
 
     # Запуск планировщика задач
@@ -313,6 +350,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
