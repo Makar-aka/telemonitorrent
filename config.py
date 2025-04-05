@@ -23,7 +23,7 @@ USERS_DB_PATH = 'users.db'
 WAITING_URL = 1
 
 # Настройка логирования
-logging.basicConfig(level=LOG_LEVEL, format=LOG_FORMAT)
+logging.basicConfig(level=logging.DEBUG, format=LOG_FORMAT)
 logger = logging.getLogger(__name__)
 
 def check_required_env_vars():
@@ -32,8 +32,23 @@ def check_required_env_vars():
     missing_vars = [var for var in required_vars if var not in os.environ]
     
     if missing_vars:
-        print("ОШИБКА: Отсутствуют обязательные переменные окружения:")
+        logger.error("ОШИБКА: Отсутствуют обязательные переменные окружения:")
         for var in missing_vars:
-            print(f" - {var}")
-        print("\nДобавьте их в файл .env или установите в окружении.")
+            logger.error(f" - {var}")
+        logger.error("\nДобавьте их в файл .env или установите в окружении.")
         sys.exit(1)
+
+# Пример функции добавления страницы
+def add_page(page_url):
+    logger.info(f"Добавление страницы: {page_url}")
+    # Логика добавления страницы
+    logger.debug(f"Полный лог добавления страницы: {page_url}")
+
+# Пример функции обновления страницы
+def update_page(page_url):
+    logger.info(f"Обновление страницы: {page_url}")
+    # Логика обновления страницы
+    logger.debug(f"Полный лог обновления страницы: {page_url}")
+
+# Вызов проверки переменных окружения
+check_required_env_vars()
