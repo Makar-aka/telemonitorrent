@@ -7,13 +7,12 @@ from telegram.ext import (
     Filters, ConversationHandler
 )
 from rutracker_api import RutrackerAPI
-from dotenv import load_dotenv
 import os
 import sys
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
-    RUTRACKER_PASSWORD, WAITING_URL, logger
+    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT
 )
 from database import init_db, init_users_db
 from utils import check_pages
@@ -24,19 +23,9 @@ from handlers import (
     user_help_cmd, button, handle_text, set_dependencies
 )
 
-# Загрузка переменных окружения из .env файла
-load_dotenv()
-
-LOG_FILE = os.getenv('LOG_FILE')
-LOG_FORMAT = os.getenv('LOG_FORMAT')
-
-# Проверка наличия переменных окружения для логирования
-if not LOG_FILE:
-    print("ОШИБКА: Переменная окружения LOG_FILE не установлена")
-    sys.exit(1)
-if not LOG_FORMAT:
-    LOG_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    print(f"ПРЕДУПРЕЖДЕНИЕ: Переменная окружения LOG_FORMAT не установлена. Используется формат по умолчанию: {LOG_FORMAT}")
+# Глобальные переменные для доступа в других функциях
+rutracker_api = None
+BOT = None
 
 # Создание директории для лог-файла, если она не существует
 log_dir = os.path.dirname(LOG_FILE)
