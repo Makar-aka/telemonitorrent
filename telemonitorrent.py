@@ -58,15 +58,41 @@ def init_db():
     conn.close()
     logger.info("База данных инициализирована")
 
+# Функция для поиска первого свободного ID в базе данных
+def find_first_available_id():
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # Получаем все существующие ID
+    cursor.execute("SELECT id FROM pages ORDER BY id")
+    existing_ids = [row[0] for row in cursor.fetchall()]
+    
+    # Ищем первый свободный ID
+    next_id = 1
+    while next_id in existing_ids:
+        next_id += 1
+    
+    conn.close()
+    return next_id
+
 # Функция для добавления страницы в базу данных
 def add_page(title, url):
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    cursor.execute("INSERT INTO pages (title, url) VALUES (?, ?)", (title, url))
-    page_id = cursor.lastrowid
+    
+    # Находим первый свободный ID
+    free_id = find_first_available_id()
+    
+    # Вставляем запись с указанным ID
+    cursor.execute("INSERT INTO pages (id, title, url) VALUES (?, ?, ?)", 
+                   (free_id, title, url))
+    
+    # Получаем ID вставленной записи
+    page_id = free_id
+    
     conn.commit()
     conn.close()
-    logger.info(f"Страница {title} добавлена для мониторинга")
+    logger.info(f"Страница {title} добавлена для мониторинга с ID {page_id}")
 
     # Загрузка торрент-файла при добавлении новой страницы
     page_content = rutracker_api.get_page_content(url)
@@ -77,6 +103,8 @@ def add_page(title, url):
         update_page_date(page_id, new_date)
         logger.info(f"Торрент-файл для новой страницы {title} скачан в {torrent_file_path}")
     update_last_checked(page_id)
+    
+    return page_id
 
 # Функция для получения списка страниц из базы данных
 def get_pages():
@@ -169,7 +197,7 @@ def add_url(update: Update, context: CallbackContext) -> int:
         add_page(title, url)
         logger.debug("Страница добавлена в базу данных")
         
-        keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
+        keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
         logger.debug("Отправлено подтверждение добавления")
@@ -214,7 +242,7 @@ def button(update: Update, context: CallbackContext) -> None:
             url, date, last_checked = row
             edit_date = rutracker_api.get_edit_date(url)
             keyboard = [
-                [InlineKeyboardButton("Назад", callback_data="back_to_list"),
+                [InlineKeyboardButton("Назад к списку", callback_data="back_to_list"),
                  InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}"),
                  InlineKeyboardButton(f"Обновить сейчас ({last_checked})", callback_data=f"refresh_{page_id}"),
                  InlineKeyboardButton("Раздача", url=url)]
@@ -226,7 +254,9 @@ def button(update: Update, context: CallbackContext) -> None:
     elif action == 'delete':
         page_id = int(data[1])
         delete_page(page_id)
-        query.edit_message_text(text=f'Страница с ID {page_id} удалена')
+        keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        query.edit_message_text(text=f'Страница с ID {page_id} удалена', reply_markup=reply_markup)
         logger.info(f"Кнопка удаления для страницы с ID {page_id} нажата")
 
     elif action == 'refresh':
@@ -240,7 +270,7 @@ def button(update: Update, context: CallbackContext) -> None:
             url = row[0]
             edit_date = rutracker_api.get_edit_date(url)
             update_last_checked(page_id)
-            keyboard = [[InlineKeyboardButton("Назад", callback_data="back_to_list")]]
+            keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
             logger.info(f"Кнопка обновления сейчас для страницы с ID {page_id} нажата, дата: {edit_date}")
@@ -256,16 +286,15 @@ def button(update: Update, context: CallbackContext) -> None:
         logger.info("Возврат к списку страниц")
 
     elif action == 'add':
-        if data[1] == 'url':
-            if data[2] == 'button':
-                # Отправляем новое сообщение для запроса URL
-                context.bot.send_message(
-                    chat_id=query.message.chat_id,
-                    text='Пришли мне ссылку для мониторинга:'
-                )
-                logger.info("Отправлен запрос на ссылку после нажатия кнопки")
-                # Сохраняем в контексте информацию о запросе URL
-                context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
+        if len(data) > 2 and data[1] == 'url' and data[2] == 'button':
+            # Отправляем новое сообщение для запроса URL
+            context.bot.send_message(
+                chat_id=query.message.chat_id,
+                text='Пришли мне ссылку для мониторинга:'
+            )
+            logger.info("Отправлен запрос на ссылку после нажатия кнопки")
+            # Сохраняем в контексте информацию о запросе URL
+            context.bot_data[f'waiting_url_{query.message.chat_id}'] = True
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
@@ -294,10 +323,10 @@ def handle_text(update: Update, context: CallbackContext) -> None:
             title = rutracker_api.get_page_title(url)
             logger.debug(f"Получен заголовок: {title}")
             
-            add_page(title, url)
-            logger.debug("Страница добавлена в базу данных")
+            page_id = add_page(title, url)
+            logger.debug(f"Страница добавлена в базу данных с ID {page_id}")
             
-            keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
+            keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
             logger.debug("Отправлено подтверждение добавления")
@@ -364,19 +393,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
