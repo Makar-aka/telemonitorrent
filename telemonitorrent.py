@@ -291,7 +291,18 @@ def display_pages_list(update_or_query):
     title_text = f'Страницы для мониторинга (проверка {interval_text}):'
     
     if pages:
-        keyboard = [[InlineKeyboardButton(page[1], callback_data=f"page_{page[0]}")] for page in pages]
+        keyboard = []
+        for page in pages:
+            page_id, title, url, date, last_checked = page
+            # Если дата обновления есть, добавляем ее в текст кнопки
+            button_text = title
+            if date:
+                # Сокращаем дату до более компактного формата
+                short_date = date.split()[0] if " " in date else date
+                button_text = f"{title} [{short_date}]"
+            
+            keyboard.append([InlineKeyboardButton(button_text, callback_data=f"page_{page_id}")])
+    
     keyboard.append([InlineKeyboardButton("Добавить", callback_data="add_url_button")])
     reply_markup = InlineKeyboardMarkup(keyboard)
     
@@ -301,6 +312,7 @@ def display_pages_list(update_or_query):
         update_or_query.edit_message_text(text=title_text, reply_markup=reply_markup)
     
     logger.info("Список страниц отображен")
+
 
 # Декоратор для проверки доступа
 def restricted(func):
@@ -443,10 +455,13 @@ def check_now(update: Update, context: CallbackContext) -> None:
     # Выполняем проверку
     updates_found = check_pages()
     
+    keyboard = [[InlineKeyboardButton("Назад к списку", callback_data="back_to_list")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     if updates_found:
-        update.message.reply_text('Проверка завершена. Найдены обновления!')
+        update.message.reply_text('Проверка завершена. Найдены обновления!', reply_markup=reply_markup)
     else:
-        update.message.reply_text('Проверка завершена. Обновлений не найдено.')
+        update.message.reply_text('Проверка завершена. Обновлений не найдено.', reply_markup=reply_markup)
     
     logger.info("Запущена ручная проверка страниц")
 
