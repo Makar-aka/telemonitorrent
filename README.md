@@ -8,9 +8,9 @@
 
 1. Клонируйте репозиторий:
 
-git clone https://github.com/yourusername/yourrepository.git
+git clone https://github.com/Makar-aka/telemonitorrent.git
 
-cd yourrepository
+cd telemonitorrent
 
 pip install -r requirements.txt
 
