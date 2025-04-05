@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: your-app-name
+    restart: unless-stopped
+    volumes:
+      - ./:/app
+      - files:/app/files
+    env_file:
+      - .env
+    # ports:
+    #   - "8000:8000"  # Раскомментируйте если нужно открыть порты
+    
+  # Добавьте другие сервисы, если они нужны
+  # db:
+  #   image: postgres:13
+  #   environment:
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=postgres
+  #     - POSTGRES_DB=app
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+volumes:
+  files:  # Определение именованного тома files
+  # postgres_data:
+#   volumes:
+#   postgres_data:    
