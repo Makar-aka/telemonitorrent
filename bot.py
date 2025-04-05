@@ -29,6 +29,11 @@ load_dotenv()
 LOG_FILE = os.getenv('LOG_FILE', 'bot.log')
 LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
+# Создание файла логов, если он не существует
+if not os.path.exists(LOG_FILE):
+    with open(LOG_FILE, 'w') as file:
+        pass
+
 # Настройка логирования
 logging.basicConfig(
     level=logging.INFO,
@@ -111,3 +116,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
