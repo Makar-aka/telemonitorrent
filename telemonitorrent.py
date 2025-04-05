@@ -15,7 +15,7 @@ load_dotenv()
 CHECK_INTERVAL = int(os.getenv('CHECK_INTERVAL', 10))
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
-LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levellevel)s - %(message)s')
+LOG_FORMAT = os.getenv('LOG_FORMAT', '%(asctime)s - %(levelname)s - %(message)s')
 USE_PROXY = os.getenv('USE_PROXY', 'False').lower() == 'true'
 HTTP_PROXY = os.getenv('HTTP_PROXY')
 HTTPS_PROXY = os.getenv('HTTPS_PROXY')
@@ -181,7 +181,7 @@ def button(update: Update, context: CallbackContext) -> None:
             url, date, last_checked = row
             edit_date = rutracker_api.get_edit_date(url)
             keyboard = [
-                [InlineKeyboardButton("Update", callback_data=f"update_{page_id}"),
+                [InlineKeyboardButton("Назад", callback_data="back_to_list"),
                  InlineKeyboardButton("Delete", callback_data=f"delete_{page_id}"),
                  InlineKeyboardButton(f"Обновить сейчас ({last_checked})", callback_data=f"refresh_{page_id}"),
                  InlineKeyboardButton("Раздача", url=url)]
@@ -189,10 +189,6 @@ def button(update: Update, context: CallbackContext) -> None:
             reply_markup = InlineKeyboardMarkup(keyboard)
             query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=reply_markup)
             logger.info(f"Кнопка страницы с ID {page_id} нажата, дата: {edit_date}")
-
-    elif action == 'update':
-        query.edit_message_text(text=f'Введите новую ссылку для страницы с ID {page_id} с помощью команды /update {page_id} <ссылка>')
-        logger.info(f"Кнопка обновления для страницы с ID {page_id} нажата")
 
     elif action == 'delete':
         delete_page(page_id)
@@ -265,6 +261,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
