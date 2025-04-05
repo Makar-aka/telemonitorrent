@@ -101,7 +101,7 @@ def update_page_date(page_id, new_date):
 
 # Функция для обновления времени последней проверки страницы в базе данных
 def update_last_checked(page_id):
-    last_checked = datetime.now().strftime('%Y-%м-%д %H:%М:%S')
+    last_checked = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("UPDATE pages SET last_checked = ? WHERE id = ?", (last_checked, page_id))
@@ -218,21 +218,51 @@ def button(update: Update, context: CallbackContext) -> None:
         list_pages(update, context)
 
     elif action == 'add_page':
+        # Устанавливаем флаг для ожидания URL
+        if 'user_id' not in context.user_data:
+            context.user_data['user_id'] = query.from_user.id
         context.user_data['awaiting_url'] = True
-        query.edit_message_text(text='Пришли мне ссылку для мониторинга.')
-        logger.info("Кнопка добавления страницы нажата")
+        logger.info(f"Установлен флаг ожидания URL для пользователя {query.from_user.id}")
+        
+        # Отправляем новое сообщение, вместо изменения текущего
+        # Это нужно, чтобы пользователь мог видеть предыдущее сообщение
+        bot = context.bot
+        bot.send_message(
+            chat_id=query.message.chat_id,
+            text='Пришли мне ссылку для мониторинга.'
+        )
+        logger.info("Кнопка добавления страницы нажата, отправлен запрос на ссылку")
 
 # Обработчик сообщений для получения ссылки
 def handle_message(update: Update, context: CallbackContext) -> None:
+    logger.debug(f"Получено сообщение: {update.message.text}")
+    logger.debug(f"Состояние context.user_data: {context.user_data}")
+    
     if context.user_data.get('awaiting_url'):
+        logger.debug("Обработка ссылки для мониторинга")
         url = update.message.text
-        title = rutracker_api.get_page_title(url)
-        add_page(title, url)
-        keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
-        context.user_data['awaiting_url'] = False
-        logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
+        logger.debug(f"Получена ссылка: {url}")
+        
+        try:
+            title = rutracker_api.get_page_title(url)
+            logger.debug(f"Получен заголовок: {title}")
+            
+            add_page(title, url)
+            logger.debug("Страница добавлена в базу данных")
+            
+            keyboard = [[InlineKeyboardButton("Главная", callback_data="back_to_list")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            update.message.reply_text(f'Ссылку поймал и добавил в мониторинг.', reply_markup=reply_markup)
+            logger.debug("Отправлено подтверждение добавления")
+            
+            context.user_data['awaiting_url'] = False
+            logger.debug("Флаг ожидания URL сброшен")
+            
+            logger.info(f"Страница {title} добавлена для мониторинга через сообщение")
+        except Exception as e:
+            logger.error(f"Ошибка при обработке ссылки: {e}")
+            update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
+            context.user_data['awaiting_url'] = False
 
 # Обработчик команды /update
 def update_page(update: Update, context: CallbackContext) -> None:
@@ -283,6 +313,7 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
 
