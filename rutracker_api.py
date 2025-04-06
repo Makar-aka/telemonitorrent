@@ -2,6 +2,10 @@ import os
 import requests
 import re
 import logging
+import time
+import asyncio
+import aiohttp
+import functools
 from bs4 import BeautifulSoup
 from contextlib import contextmanager
 
@@ -11,13 +15,15 @@ class RutrackerAPI:
     """
     Класс для взаимодействия с API RuTracker
     """
-    def __init__(self, username, password):
+    def __init__(self, username, password, cache_size=128, request_timeout=30):
         """
         Инициализирует сессию и параметры для работы с RuTracker
         
         Args:
             username (str): Имя пользователя для авторизации
             password (str): Пароль для авторизации
+            cache_size (int): Размер кэша для результатов запросов
+            request_timeout (int): Таймаут запросов в секундах
         """
         self.username = username
         self.password = password
@@ -25,11 +31,17 @@ class RutrackerAPI:
         self.base_url = "https://rutracker.org/forum/"
         self.logged_in = False
         self.proxies = self.setup_proxies()
+        self.request_timeout = request_timeout
+        self.last_request_time = 0
+        self.request_interval = 1.0  # Минимальный интервал между запросами (в секундах)
         
         # Стандартные заголовки для запросов
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
         }
+        
+        # Декорируем метод get_page_content для кэширования
+        self.get_page_content = functools.lru_cache(maxsize=cache_size)(self.get_page_content)
 
     def setup_proxies(self):
         """
@@ -77,6 +89,53 @@ class RutrackerAPI:
             logger.error(f"Ошибка при проверке прокси {proxy_url}: {e}")
             return False
 
+    def ensure_session(self):
+        """
+        Убеждается, что сессия активна, или создает новую
+        
+        Returns:
+            bool: True, если сессия активна
+        """
+        try:
+            # Проверяем сессию простым запросом
+            test_url = f"{self.base_url}index.php"
+            test_response = self.session.get(
+                test_url, 
+                headers=self.headers, 
+                proxies=self.proxies, 
+                timeout=self.request_timeout
+            )
+            
+            # Проверяем, что мы не получили ошибку и что мы все еще авторизованы
+            if test_response.status_code == 200 and self.is_logged_in_page(test_response.text):
+                logger.debug("Сессия активна")
+                return True
+                
+            logger.warning("Сессия недействительна, восстановление")
+        except Exception as e:
+            logger.warning(f"Ошибка при проверке сессии: {e}")
+        
+        # Пересоздаем сессию и заново авторизуемся
+        try:
+            self.session = requests.Session()
+            self.logged_in = False
+            return self.login()
+        except Exception as e:
+            logger.error(f"Не удалось пересоздать сессию: {e}")
+            return False
+
+    def is_logged_in_page(self, html_content):
+        """
+        Проверяет, содержит ли страница признаки авторизованного пользователя
+        
+        Args:
+            html_content (str): HTML-содержимое страницы
+            
+        Returns:
+            bool: True, если пользователь авторизован
+        """
+        return "logged-in" in html_content or "logout" in html_content
+
     def login(self):
         """
         Выполняет вход на сайт
@@ -96,10 +155,16 @@ class RutrackerAPI:
         }
 
         try:
-            response = self.session.post(login_url, data=payload, headers=self.headers, proxies=self.proxies)
+            response = self.session.post(
+                login_url, 
+                data=payload, 
+                headers=self.headers, 
+                proxies=self.proxies,
+                timeout=self.request_timeout
+            )
             response.raise_for_status()  # Проверяем статус ответа
             
-            self.logged_in = "logged-in" in response.text or "logout" in response.text
+            self.logged_in = self.is_logged_in_page(response.text)
             
             if self.logged_in:
                 logger.info("Успешная авторизация на RuTracker")
@@ -111,9 +176,25 @@ class RutrackerAPI:
             logger.error(f"Ошибка при авторизации: {e}")
             return False
 
+    def rate_limit_request(self):
+        """
+        Ограничивает частоту запросов для предотвращения блокировки
+        """
+        current_time = time.time()
+        time_since_last_request = current_time - self.last_request_time
+        
+        if time_since_last_request < self.request_interval:
+            # Если с момента последнего запроса прошло меньше минимального интервала,
+            # делаем паузу на оставшееся время
+            wait_time = self.request_interval - time_since_last_request
+            logger.debug(f"Ограничение запросов: ожидание {wait_time:.2f} сек")
+            time.sleep(wait_time)
+            
+        self.last_request_time = time.time()
+
     def get_page_content(self, url):
         """
-        Получает содержимое страницы
+        Получает содержимое страницы (с кэшированием результатов)
         
         Args:
             url (str): URL страницы
@@ -122,16 +203,119 @@ class RutrackerAPI:
             str or None: HTML-код страницы или None в случае ошибки
         """
         try:
-            if not self.login():
-                logger.error("Не удалось получить страницу: не выполнен вход")
+            # Проверяем состояние сессии и переподключаемся если необходимо
+            if not self.ensure_session():
+                logger.error("Не удалось получить страницу: сессия недействительна")
                 return None
                 
-            response = self.session.get(url, headers=self.headers, proxies=self.proxies)
+            # Ограничиваем частоту запросов
+            self.rate_limit_request()
+                
+            response = self.session.get(
+                url, 
+                headers=self.headers, 
+                proxies=self.proxies,
+                timeout=self.request_timeout
+            )
             response.raise_for_status()
             return response.text
         except Exception as e:
             logger.error(f"Ошибка при получении страницы {url}: {e}")
             return None
+
+    async def get_page_content_async(self, url):
+        """
+        Асинхронно получает содержимое страницы
+        
+        Args:
+            url (str): URL страницы
+            
+        Returns:
+            str or None: HTML-код страницы или None в случае ошибки
+        """
+        # Сначала проверяем наличие результата в кэше
+        result = self.get_page_content.__wrapped__.__self__.cache_get(url)
+        if result is not None:
+            return result
+        
+        try:
+            # Необходимо убедиться, что мы авторизованы
+            if not self.ensure_session():
+                logger.error("Не удалось получить страницу асинхронно: сессия недействительна")
+                return None
+                
+            # Создаем асинхронную сессию и копируем куки из обычной сессии
+            cookies = dict(self.session.cookies)
+            
+            # Подготавливаем прокси
+            proxy = None
+            if self.proxies:
+                proxy = self.proxies.get('http') or self.proxies.get('https')
+            
+            async with aiohttp.ClientSession(cookies=cookies) as session:
+                # Ограничиваем частоту запросов
+                current_time = time.time()
+                time_since_last_request = current_time - self.last_request_time
+                if time_since_last_request < self.request_interval:
+                    await asyncio.sleep(self.request_interval - time_since_last_request)
+                    
+                self.last_request_time = time.time()
+                
+                # Выполняем запрос
+                async with session.get(
+                    url, 
+                    headers=self.headers, 
+                    proxy=proxy, 
+                    timeout=self.request_timeout
+                ) as response:
+                    if response.status != 200:
+                        logger.error(f"Ошибка при асинхронном запросе страницы {url}: статус {response.status}")
+                        return None
+                        
+                    content = await response.text()
+                    
+                    # Кэшируем результат
+                    self.get_page_content.__wrapped__.__self__.cache_put(url, content)
+                    
+                    return content
+        except asyncio.TimeoutError:
+            logger.error(f"Таймаут при асинхронном запросе страницы {url}")
+            return None
+        except Exception as e:
+            logger.error(f"Ошибка при асинхронном запросе страницы {url}: {e}")
+            return None
+
+    async def get_multiple_pages_async(self, urls):
+        """
+        Асинхронно получает содержимое нескольких страниц
+        
+        Args:
+            urls (list): Список URL-адресов
+            
+        Returns:
+            dict: Словарь {url: content} с результатами
+        """
+        tasks = [self.get_page_content_async(url) for url in urls]
+        results = await asyncio.gather(*tasks)
+        
+        return {url: content for url, content in zip(urls, results) if content is not None}
+
+    def get_multiple_pages(self, urls):
+        """
+        Получает содержимое нескольких страниц (использует асинхронный код под капотом)
+        
+        Args:
+            urls (list): Список URL-адресов
+            
+        Returns:
+            dict: Словарь {url: content} с результатами
+        """
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(self.get_multiple_pages_async(urls))
+        finally:
+            loop.close()
 
     def parse_date(self, page_content):
         """
@@ -207,12 +391,18 @@ class RutrackerAPI:
             str or None: Путь к файлу или None в случае ошибки
         """
         try:
-            if not self.login():
-                logger.error("Не удалось скачать торрент: не выполнен вход")
+            # Проверяем состояние сессии и переподключаемся если необходимо
+            if not self.ensure_session():
+                logger.error("Не удалось скачать торрент: сессия недействительна")
                 return None
 
             # Получаем страницу с торрентом
-            response = self.session.get(page_url, headers=self.headers, proxies=self.proxies)
+            response = self.session.get(
+                page_url, 
+                headers=self.headers, 
+                proxies=self.proxies,
+                timeout=self.request_timeout
+            )
             response.raise_for_status()
 
             # Ищем ссылку на скачивание
@@ -224,7 +414,17 @@ class RutrackerAPI:
 
             # Скачиваем торрент-файл
             download_url = self.base_url + download_link_element["href"]
-            torrent_response = self.session.get(download_url, headers=self.headers, proxies=self.proxies, stream=True)
+            
+            # Делаем паузу перед следующим запросом
+            self.rate_limit_request()
+            
+            torrent_response = self.session.get(
+                download_url, 
+                headers=self.headers, 
+                proxies=self.proxies, 
+                stream=True,
+                timeout=self.request_timeout
+            )
             torrent_response.raise_for_status()
             
             # Создаем директорию, если не существует
@@ -240,6 +440,13 @@ class RutrackerAPI:
         except Exception as e:
             logger.error(f"Ошибка при загрузке торрента по ссылке {page_url}: {e}")
             return None
+            
+    def clear_cache(self):
+        """
+        Очищает кэш запросов
+        """
+        self.get_page_content.cache_clear()
+        logger.debug("Кэш запросов очищен")
             
     def close(self):
         """
