@@ -26,6 +26,14 @@ from handlers import (
     user_help_cmd, button, handle_text, set_dependencies
 )
 
+# Устанавливаем переменную окружения TZ
+os.environ['TZ'] = TIMEZONE
+try:
+    time.tzset()
+except AttributeError:
+    # Для Windows, tzset не доступен
+    pass
+
 # Глобальные переменные для доступа в других функциях
 rutracker_api = None
 BOT = None
@@ -70,6 +78,7 @@ logger.info("========== НАЧАЛО СЕССИИ ==========")
 logger.info(f"Файл логов: {LOG_FILE}")
 logger.info(f"Формат логов: {LOG_FORMAT}")
 logger.info(f"Интервал проверки: {CHECK_INTERVAL} минут")
+logger.info(f"Временная зона: {TIMEZONE}")
 logger.debug("Настройка логирования завершена успешно")
 
 def run_schedule_wrapper():
@@ -129,22 +138,12 @@ def main() -> None:
         global rutracker_api
         rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
         
-        # Инициализация бота и диспетчера
-        logger.debug("Инициализация бота и диспетчера")
-        
-        # Создаем локальную переменную для timezone, чтобы избежать ошибок
-        tz = pytz.timezone(TIMEZONE)
-        
-        # Инициализируем приложение с явным указанием часового пояса
-        builder = ApplicationBuilder().token(BOT_TOKEN)
+        # Отключаем job_queue
+        builder = ApplicationBuilder().token(BOT_TOKEN).job_queue(None)
         
         # Добавляем прокси, если нужно
         if USE_PROXY:
             builder = builder.proxy_url(HTTP_PROXY)
-        
-        # Настраиваем часовой пояс через job_queue
-        job_queue_params = {'job_kwargs': {'tzinfo': tz}}
-        builder = builder.defaults(job_queue_params)
         
         # Строим приложение
         application = builder.build()
@@ -209,3 +208,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
