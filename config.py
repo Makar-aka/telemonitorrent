@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
+import pytz
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
@@ -29,6 +30,7 @@ NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'True').lower() 
 USE_PROXY = os.environ.get('USE_PROXY', 'false').lower() == 'true'
 HTTP_PROXY = os.environ.get('HTTP_PROXY', '')
 HTTPS_PROXY = os.environ.get('HTTPS_PROXY', '')
+TIMEZONE = os.environ.get('TIMEZONE', 'UTC')
 
 # Пути к базам данных SQLite
 DB_PATH = get_env_var('DB_PATH')
@@ -68,3 +70,5 @@ def check_required_env_vars():
     print(f"Директория для файлов: {FILE_DIR}")
     print(f"Файл логов: {LOG_FILE}")
     print(f"Уведомления: {'Включены' if NOTIFICATIONS_ENABLED else 'Отключены'}")
+    print(f"Временная зона: {TIMEZONE}")
+

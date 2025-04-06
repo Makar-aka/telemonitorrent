@@ -11,10 +11,11 @@ from telegram.ext import (
 )
 from rutracker_api import RutrackerAPI
 import sys
+import pytz
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
-    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT, LOG_MAX_BYTES, LOG_BACKUP_COUNT, USE_PROXY, HTTP_PROXY, HTTPS_PROXY
+    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT, LOG_MAX_BYTES, LOG_BACKUP_COUNT, USE_PROXY, HTTP_PROXY, HTTPS_PROXY, TIMEZONE
 )
 from database import init_db, init_users_db
 from utils import check_pages
@@ -137,6 +138,9 @@ def main() -> None:
         global BOT
         BOT = application.bot
         
+        # Установка временной зоны
+        application.job_queue.scheduler.configure(timezone=pytz.timezone(TIMEZONE))
+        
         # Передаем зависимости в модуль handlers
         logger.debug("Передача зависимостей в модуль handlers")
         set_dependencies(rutracker_api, BOT)
@@ -194,5 +198,6 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
 
