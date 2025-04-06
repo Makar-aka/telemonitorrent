@@ -30,7 +30,7 @@ NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'True').lower() 
 USE_PROXY = os.environ.get('USE_PROXY', 'false').lower() == 'true'
 HTTP_PROXY = os.environ.get('HTTP_PROXY', '')
 HTTPS_PROXY = os.environ.get('HTTPS_PROXY', '')
-TIMEZONE = os.environ.get('TIMEZONE', 'UTC')
+TIMEZONE = os.environ.get('TIMEZONE', 'Europe/Moscow')
 
 # Пути к базам данных SQLite
 DB_PATH = get_env_var('DB_PATH')
