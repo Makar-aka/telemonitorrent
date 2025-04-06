@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 from dotenv import load_dotenv
-import pytz
 
 # Загрузка переменных окружения из файла .env
 load_dotenv()
@@ -71,4 +70,3 @@ def check_required_env_vars():
     print(f"Файл логов: {LOG_FILE}")
     print(f"Уведомления: {'Включены' if NOTIFICATIONS_ENABLED else 'Отключены'}")
     print(f"Временная зона: {TIMEZONE}")
-

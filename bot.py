@@ -7,16 +7,16 @@ from threading import Thread
 from telegram import Bot, Update
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler,
-    filters, ConversationHandler, Updater
+    filters, ConversationHandler
 )
 from rutracker_api import RutrackerAPI
 import sys
-import pytz
 import asyncio
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
-    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT, LOG_MAX_BYTES, LOG_BACKUP_COUNT, USE_PROXY, HTTP_PROXY, HTTPS_PROXY, TIMEZONE
+    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT, LOG_MAX_BYTES, LOG_BACKUP_COUNT, 
+    USE_PROXY, HTTP_PROXY, HTTPS_PROXY, TIMEZONE
 )
 from database import init_db, init_users_db
 from utils import check_pages
@@ -126,10 +126,19 @@ async def create_application():
     # Создаем бота
     bot_instance = Bot(token=BOT_TOKEN)
     
-    # Создаем приложение вручную
-    app = Application.builder().bot(bot_instance).build()
+    # Создаем приложение без job_queue
+    app = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .job_queue(None)
+    )
     
-    return app
+    # Добавляем прокси, если нужно
+    if USE_PROXY:
+        app.proxy_url(HTTP_PROXY)
+    
+    # Строим приложение
+    return app.build()
 
 def main() -> None:
     try:
@@ -214,5 +223,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
