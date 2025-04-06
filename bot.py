@@ -1,18 +1,20 @@
+import os
 import schedule
 import time
 import logging
+from logging.handlers import RotatingFileHandler
 from threading import Thread
+from telegram import Update
 from telegram.ext import (
-    Updater, CommandHandler, CallbackQueryHandler, MessageHandler,
-    Filters, ConversationHandler
+    ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler,
+    filters, ConversationHandler
 )
 from rutracker_api import RutrackerAPI
-import os
 import sys
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
-    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT
+    RUTRACKER_PASSWORD, WAITING_URL, LOG_FILE, LOG_FORMAT, LOG_MAX_BYTES, LOG_BACKUP_COUNT, USE_PROXY, HTTP_PROXY, HTTPS_PROXY
 )
 from database import init_db, init_users_db
 from utils import check_pages
@@ -47,7 +49,7 @@ for handler in root_logger.handlers[:]:
 root_logger.setLevel(logging.DEBUG)
 
 # Создание обработчиков
-file_handler = logging.FileHandler(LOG_FILE)
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT)
 file_handler.setLevel(logging.DEBUG)  # Записываем все в файл
 file_handler.setFormatter(logging.Formatter(LOG_FORMAT))
 
@@ -128,10 +130,12 @@ def main() -> None:
         
         # Инициализация бота и диспетчера
         logger.debug("Инициализация бота и диспетчера")
-        updater = Updater(BOT_TOKEN)
+        if USE_PROXY.lower() == 'true':
+            application = ApplicationBuilder().token(BOT_TOKEN).proxy_url(HTTP_PROXY).build()
+        else:
+            application = ApplicationBuilder().token(BOT_TOKEN).build()
         global BOT
-        BOT = updater.bot
-        dispatcher = updater.dispatcher
+        BOT = application.bot
         
         # Передаем зависимости в модуль handlers
         logger.debug("Передача зависимостей в модуль handlers")
@@ -139,36 +143,36 @@ def main() -> None:
 
         # Регистрация обработчиков
         logger.debug("Регистрация обработчиков команд")
-        dispatcher.add_handler(CommandHandler("start", start))
-        dispatcher.add_handler(CommandHandler("add", add_with_arg, pass_args=True))
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("add", add_with_arg))
         
         add_conversation = ConversationHandler(
-            entry_points=[CommandHandler("add", add_start, filters=Filters.command & ~Filters.regex(r'^/add\s+\S+'))],
+            entry_points=[CommandHandler("add", add_start, filters=~filters.Regex(r'^/add\s+\S+'))],
             states={
-                WAITING_URL: [MessageHandler(Filters.text & ~Filters.command, add_url)],
+                WAITING_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_url)],
             },
             fallbacks=[CommandHandler("cancel", cancel_add)],
         )
-        dispatcher.add_handler(add_conversation)
+        application.add_handler(add_conversation)
         
-        dispatcher.add_handler(CommandHandler("list", list_pages))
-        dispatcher.add_handler(CommandHandler("update", update_page_cmd))
-        dispatcher.add_handler(CommandHandler("check", check_now))
-        dispatcher.add_handler(CommandHandler("help", user_help_cmd))
+        application.add_handler(CommandHandler("list", list_pages))
+        application.add_handler(CommandHandler("update", update_page_cmd))
+        application.add_handler(CommandHandler("check", check_now))
+        application.add_handler(CommandHandler("help", user_help_cmd))
         
         # Команды для управления подписками
-        dispatcher.add_handler(CommandHandler("subscribe", toggle_subscription))
-        dispatcher.add_handler(CommandHandler("status", subscription_status))
+        application.add_handler(CommandHandler("subscribe", toggle_subscription))
+        application.add_handler(CommandHandler("status", subscription_status))
         
         # Административные команды
-        dispatcher.add_handler(CommandHandler("users", list_users))
-        dispatcher.add_handler(CommandHandler("makeadmin", make_admin))
-        dispatcher.add_handler(CommandHandler("removeadmin", remove_admin))
-        dispatcher.add_handler(CommandHandler("adduser", add_user_cmd))
-        dispatcher.add_handler(CommandHandler("userdel", delete_user_cmd))
+        application.add_handler(CommandHandler("users", list_users))
+        application.add_handler(CommandHandler("makeadmin", make_admin))
+        application.add_handler(CommandHandler("removeadmin", remove_admin))
+        application.add_handler(CommandHandler("adduser", add_user_cmd))
+        application.add_handler(CommandHandler("userdel", delete_user_cmd))
         
-        dispatcher.add_handler(CallbackQueryHandler(button))
-        dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+        application.add_handler(CallbackQueryHandler(button))
+        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
         logger.debug("Все обработчики команд зарегистрированы")
 
         # Настройка и запуск планировщика задач
@@ -182,9 +186,7 @@ def main() -> None:
 
         # Запуск бота
         logger.info("Бот запущен и готов к работе")
-        updater.start_polling()
-        logger.debug("Вызов updater.idle()")
-        updater.idle()
+        application.run_polling()
         
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
@@ -192,3 +194,4 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+

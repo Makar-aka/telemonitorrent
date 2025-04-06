@@ -37,6 +37,8 @@ LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s\
 DB_PATH=database.db\
 USERS_DB_PATH=users.db
 
+LOG_MAX_BYTES=5120  # 5 MB
+LOG_BACKUP_COUNT=5
 
 ## Запуск
 ### Обычный запуск
