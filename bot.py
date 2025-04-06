@@ -4,14 +4,15 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 from threading import Thread
-from telegram import Bot, Update
+import telegram
 from telegram.ext import (
     Application, CommandHandler, CallbackQueryHandler, MessageHandler,
-    filters, ConversationHandler
+    filters, ConversationHandler, ExtBot, AIORateLimiter, Updater
 )
 from rutracker_api import RutrackerAPI
 import sys
 import asyncio
+import httpx
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
@@ -121,24 +122,53 @@ def scheduled_check():
         logger.error(f"Ошибка при плановой проверке: {e}", exc_info=True)
         return False
 
-# Функция для получения экземпляра Application без использования ApplicationBuilder
-async def create_application():
-    # Создаем бота
-    bot_instance = Bot(token=BOT_TOKEN)
+class CustomApplication(Application):
+    """Кастомный класс Application для избежания проблем с pytz и apscheduler"""
     
-    # Создаем приложение без job_queue
-    app = (
-        Application.builder()
-        .token(BOT_TOKEN)
-        .job_queue(None)
-    )
-    
-    # Добавляем прокси, если нужно
-    if USE_PROXY:
-        app.proxy_url(HTTP_PROXY)
-    
-    # Строим приложение
-    return app.build()
+    def __init__(self, bot, update_queue):
+        self.bot = bot
+        self.update_queue = update_queue
+        self.update_queue_handler = None
+        self.updater = None
+        
+        self.update_handlers = []
+        self.chat_data = {}
+        self.user_data = {}
+        self.bot_data = {}
+        
+        # Для того чтобы можно было обращаться к app.job_queue в коде
+        # но при этом не использовать apscheduler
+        self.job_queue = None
+
+async def start_application(token, proxy=None):
+    """Создаем и настраиваем приложение без использования ApplicationBuilder"""
+    try:
+        # Настройка HTTP клиента для бота
+        client_kwargs = {}
+        if proxy:
+            client_kwargs['proxy'] = proxy
+        
+        # Создаем расширенного бота
+        request = telegram.request.HTTPXRequest(
+            connection_pool_size=8,
+            **client_kwargs
+        )
+        bot = ExtBot(token, request=request)
+        
+        # Создаем очередь обновлений
+        update_queue = asyncio.Queue()
+        
+        # Создаем кастомное приложение без использования стандартного ApplicationBuilder
+        app = CustomApplication(bot, update_queue)
+        
+        # Создаем Updater для получения обновлений
+        updater = Updater(bot, update_queue)
+        app.updater = updater
+        
+        return app
+    except Exception as e:
+        logger.error(f"Ошибка при создании приложения: {e}", exc_info=True)
+        raise
 
 def main() -> None:
     try:
@@ -161,7 +191,12 @@ def main() -> None:
         # Создаем цикл событий для создания экземпляра приложения
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
-        application = loop.run_until_complete(create_application())
+        
+        # Настройка прокси
+        proxy = HTTP_PROXY if USE_PROXY else None
+        
+        # Создаем приложение через асинхронную функцию
+        application = loop.run_until_complete(start_application(BOT_TOKEN, proxy))
         
         global BOT
         BOT = application.bot
@@ -215,7 +250,10 @@ def main() -> None:
 
         # Запуск бота
         logger.info("Бот запущен и готов к работе")
-        application.run_polling()
+        application.updater.start_polling()
+        
+        # Ждем до тех пор, пока бот не остановят
+        application.updater.idle()
         
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
