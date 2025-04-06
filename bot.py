@@ -4,7 +4,7 @@ import logging
 from threading import Thread
 from telegram.ext import (
     Updater, CommandHandler, CallbackQueryHandler, MessageHandler,
-    Filters, ConversationHandler
+    filters, ConversationHandler
 )
 from rutracker_api import RutrackerAPI
 import os
