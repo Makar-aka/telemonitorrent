@@ -6,13 +6,11 @@ from logging.handlers import RotatingFileHandler
 from threading import Thread
 import telegram
 from telegram.ext import (
-    Application, CommandHandler, CallbackQueryHandler, MessageHandler,
-    filters, ConversationHandler, ExtBot, AIORateLimiter, Updater
+    Updater, CommandHandler, CallbackQueryHandler, MessageHandler,
+    Filters, ConversationHandler
 )
 from rutracker_api import RutrackerAPI
 import sys
-import asyncio
-import httpx
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
@@ -122,54 +120,6 @@ def scheduled_check():
         logger.error(f"Ошибка при плановой проверке: {e}", exc_info=True)
         return False
 
-class CustomApplication(Application):
-    """Кастомный класс Application для избежания проблем с pytz и apscheduler"""
-    
-    def __init__(self, bot, update_queue):
-        self.bot = bot
-        self.update_queue = update_queue
-        self.update_queue_handler = None
-        self.updater = None
-        
-        self.update_handlers = []
-        self.chat_data = {}
-        self.user_data = {}
-        self.bot_data = {}
-        
-        # Для того чтобы можно было обращаться к app.job_queue в коде
-        # но при этом не использовать apscheduler
-        self.job_queue = None
-
-async def start_application(token, proxy=None):
-    """Создаем и настраиваем приложение без использования ApplicationBuilder"""
-    try:
-        # Настройка HTTP клиента для бота
-        client_kwargs = {}
-        if proxy:
-            client_kwargs['proxy'] = proxy
-        
-        # Создаем расширенного бота
-        request = telegram.request.HTTPXRequest(
-            connection_pool_size=8,
-            **client_kwargs
-        )
-        bot = ExtBot(token, request=request)
-        
-        # Создаем очередь обновлений
-        update_queue = asyncio.Queue()
-        
-        # Создаем кастомное приложение без использования стандартного ApplicationBuilder
-        app = CustomApplication(bot, update_queue)
-        
-        # Создаем Updater для получения обновлений
-        updater = Updater(bot, update_queue)
-        app.updater = updater
-        
-        return app
-    except Exception as e:
-        logger.error(f"Ошибка при создании приложения: {e}", exc_info=True)
-        raise
-
 def main() -> None:
     try:
         logger.debug("Запуск main функции")
@@ -188,18 +138,20 @@ def main() -> None:
         global rutracker_api
         rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
         
-        # Создаем цикл событий для создания экземпляра приложения
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Инициализация бота
+        logger.debug("Инициализация бота")
         
         # Настройка прокси
-        proxy = HTTP_PROXY if USE_PROXY else None
-        
-        # Создаем приложение через асинхронную функцию
-        application = loop.run_until_complete(start_application(BOT_TOKEN, proxy))
+        request_kwargs = None
+        if USE_PROXY:
+            request_kwargs = {'proxy_url': HTTP_PROXY}
+            
+        # Создаем Updater без job_queue для избежания ошибок с pytz
+        updater = Updater(token=BOT_TOKEN, use_context=True, request_kwargs=request_kwargs)
+        dispatcher = updater.dispatcher
         
         global BOT
-        BOT = application.bot
+        BOT = updater.bot
         
         # Передаем зависимости в модуль handlers
         logger.debug("Передача зависимостей в модуль handlers")
@@ -207,36 +159,36 @@ def main() -> None:
 
         # Регистрация обработчиков
         logger.debug("Регистрация обработчиков команд")
-        application.add_handler(CommandHandler("start", start))
-        application.add_handler(CommandHandler("add", add_with_arg))
+        dispatcher.add_handler(CommandHandler("start", start))
+        dispatcher.add_handler(CommandHandler("add", add_with_arg))
         
         add_conversation = ConversationHandler(
-            entry_points=[CommandHandler("add", add_start, filters=~filters.Regex(r'^/add\s+\S+'))],
+            entry_points=[CommandHandler("add", add_start, filters=~Filters.regex(r'^/add\s+\S+'))],
             states={
-                WAITING_URL: [MessageHandler(filters.TEXT & ~filters.COMMAND, add_url)],
+                WAITING_URL: [MessageHandler(Filters.text & ~Filters.command, add_url)],
             },
             fallbacks=[CommandHandler("cancel", cancel_add)],
         )
-        application.add_handler(add_conversation)
+        dispatcher.add_handler(add_conversation)
         
-        application.add_handler(CommandHandler("list", list_pages))
-        application.add_handler(CommandHandler("update", update_page_cmd))
-        application.add_handler(CommandHandler("check", check_now))
-        application.add_handler(CommandHandler("help", user_help_cmd))
+        dispatcher.add_handler(CommandHandler("list", list_pages))
+        dispatcher.add_handler(CommandHandler("update", update_page_cmd))
+        dispatcher.add_handler(CommandHandler("check", check_now))
+        dispatcher.add_handler(CommandHandler("help", user_help_cmd))
         
         # Команды для управления подписками
-        application.add_handler(CommandHandler("subscribe", toggle_subscription))
-        application.add_handler(CommandHandler("status", subscription_status))
+        dispatcher.add_handler(CommandHandler("subscribe", toggle_subscription))
+        dispatcher.add_handler(CommandHandler("status", subscription_status))
         
         # Административные команды
-        application.add_handler(CommandHandler("users", list_users))
-        application.add_handler(CommandHandler("makeadmin", make_admin))
-        application.add_handler(CommandHandler("removeadmin", remove_admin))
-        application.add_handler(CommandHandler("adduser", add_user_cmd))
-        application.add_handler(CommandHandler("userdel", delete_user_cmd))
+        dispatcher.add_handler(CommandHandler("users", list_users))
+        dispatcher.add_handler(CommandHandler("makeadmin", make_admin))
+        dispatcher.add_handler(CommandHandler("removeadmin", remove_admin))
+        dispatcher.add_handler(CommandHandler("adduser", add_user_cmd))
+        dispatcher.add_handler(CommandHandler("userdel", delete_user_cmd))
         
-        application.add_handler(CallbackQueryHandler(button))
-        application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+        dispatcher.add_handler(CallbackQueryHandler(button))
+        dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
         logger.debug("Все обработчики команд зарегистрированы")
 
         # Настройка и запуск планировщика задач
@@ -250,10 +202,8 @@ def main() -> None:
 
         # Запуск бота
         logger.info("Бот запущен и готов к работе")
-        application.updater.start_polling()
-        
-        # Ждем до тех пор, пока бот не остановят
-        application.updater.idle()
+        updater.start_polling()
+        updater.idle()  # Ждем до тех пор, пока бот не остановят
         
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
