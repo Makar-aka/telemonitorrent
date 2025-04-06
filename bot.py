@@ -131,15 +131,26 @@ def main() -> None:
         
         # Инициализация бота и диспетчера
         logger.debug("Инициализация бота и диспетчера")
+        
+        # Создаем локальную переменную для timezone, чтобы избежать ошибок
+        tz = pytz.timezone(TIMEZONE)
+        
+        # Инициализируем приложение с явным указанием часового пояса
+        builder = ApplicationBuilder().token(BOT_TOKEN)
+        
+        # Добавляем прокси, если нужно
         if USE_PROXY:
-            application = ApplicationBuilder().token(BOT_TOKEN).proxy_url(HTTP_PROXY).build()
-        else:
-            application = ApplicationBuilder().token(BOT_TOKEN).build()
+            builder = builder.proxy_url(HTTP_PROXY)
+        
+        # Настраиваем часовой пояс через job_queue
+        job_queue_params = {'job_kwargs': {'tzinfo': tz}}
+        builder = builder.defaults(job_queue_params)
+        
+        # Строим приложение
+        application = builder.build()
+        
         global BOT
         BOT = application.bot
-        
-        # Установка временной зоны
-        application.job_queue.scheduler.configure(timezone=pytz.timezone(TIMEZONE))
         
         # Передаем зависимости в модуль handlers
         logger.debug("Передача зависимостей в модуль handlers")
@@ -198,6 +209,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-
-
