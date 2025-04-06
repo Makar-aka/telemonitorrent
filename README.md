@@ -16,8 +16,9 @@
 
 git clone https://github.com/Makar-aka/telemonitorrent.git
 
-cd telemonitorrent
-
+cd telemonitorrent\
+sudo apt update\
+sudo apt install python3 python3-pip\
 pip install -r requirements.txt
 
 4. Создайте файл `.env` в корневом каталоге проекта и добавьте в него следующие строки:
