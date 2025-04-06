@@ -20,15 +20,15 @@ BOT_TOKEN = get_env_var('BOT_TOKEN')
 LOG_LEVEL = get_env_var('LOG_LEVEL')
 LOG_FORMAT = get_env_var('LOG_FORMAT')
 LOG_FILE = get_env_var('LOG_FILE')
-LOG_MAX_BYTES = int(os.environ.get('LOG_MAX_BYTES'))  
-LOG_BACKUP_COUNT = int(os.environ.get('LOG_BACKUP_COUNT'))
+LOG_MAX_BYTES = int(os.environ.get('LOG_MAX_BYTES', 10485760))  # 10 MB по умолчанию
+LOG_BACKUP_COUNT = int(os.environ.get('LOG_BACKUP_COUNT', 5))  # 5 резервных копий по умолчанию
 RUTRACKER_USERNAME = get_env_var('RUTRACKER_USERNAME')
 RUTRACKER_PASSWORD = get_env_var('RUTRACKER_PASSWORD')
 FILE_DIR = get_env_var('FILE_DIR')
-NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED').lower() == 'true'
-USE_PROXY = os.environ.get('USE_PROXY').lower() == 'true'
-HTTP_PROXY = os.environ.get('HTTP_PROXY')
-HTTPS_PROXY = os.environ.get('HTTPS_PROXY')
+NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'True').lower() == 'true'
+USE_PROXY = os.environ.get('USE_PROXY', 'false').lower() == 'true'
+HTTP_PROXY = os.environ.get('HTTP_PROXY', '')
+HTTPS_PROXY = os.environ.get('HTTPS_PROXY', '')
 
 # Пути к базам данных SQLite
 DB_PATH = get_env_var('DB_PATH')
@@ -68,5 +68,3 @@ def check_required_env_vars():
     print(f"Директория для файлов: {FILE_DIR}")
     print(f"Файл логов: {LOG_FILE}")
     print(f"Уведомления: {'Включены' if NOTIFICATIONS_ENABLED else 'Отключены'}")
-
-
