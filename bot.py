@@ -4,14 +4,15 @@ import time
 import logging
 from logging.handlers import RotatingFileHandler
 from threading import Thread
-from telegram import Update
+from telegram import Bot, Update
 from telegram.ext import (
-    ApplicationBuilder, CommandHandler, CallbackQueryHandler, MessageHandler,
-    filters, ConversationHandler
+    Application, CommandHandler, CallbackQueryHandler, MessageHandler,
+    filters, ConversationHandler, Updater
 )
 from rutracker_api import RutrackerAPI
 import sys
 import pytz
+import asyncio
 
 from config import (
     check_required_env_vars, BOT_TOKEN, CHECK_INTERVAL, RUTRACKER_USERNAME, 
@@ -120,6 +121,16 @@ def scheduled_check():
         logger.error(f"Ошибка при плановой проверке: {e}", exc_info=True)
         return False
 
+# Функция для получения экземпляра Application без использования ApplicationBuilder
+async def create_application():
+    # Создаем бота
+    bot_instance = Bot(token=BOT_TOKEN)
+    
+    # Создаем приложение вручную
+    app = Application.builder().bot(bot_instance).build()
+    
+    return app
+
 def main() -> None:
     try:
         logger.debug("Запуск main функции")
@@ -138,15 +149,10 @@ def main() -> None:
         global rutracker_api
         rutracker_api = RutrackerAPI(RUTRACKER_USERNAME, RUTRACKER_PASSWORD)
         
-        # Отключаем job_queue
-        builder = ApplicationBuilder().token(BOT_TOKEN).job_queue(None)
-        
-        # Добавляем прокси, если нужно
-        if USE_PROXY:
-            builder = builder.proxy_url(HTTP_PROXY)
-        
-        # Строим приложение
-        application = builder.build()
+        # Создаем цикл событий для создания экземпляра приложения
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        application = loop.run_until_complete(create_application())
         
         global BOT
         BOT = application.bot
@@ -208,4 +214,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
