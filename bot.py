@@ -130,7 +130,7 @@ def main() -> None:
         
         # Инициализация бота и диспетчера
         logger.debug("Инициализация бота и диспетчера")
-        if USE_PROXY.lower() == 'true':
+        if USE_PROXY:
             application = ApplicationBuilder().token(BOT_TOKEN).proxy_url(HTTP_PROXY).build()
         else:
             application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -194,4 +194,5 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
+
 
