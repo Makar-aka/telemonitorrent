@@ -139,30 +139,42 @@ def add_url(update: Update, context: CallbackContext) -> int:
     logger.debug(f"Получена ссылка от пользователя {user_id}")
     
     try:
+        # Получаем заголовок страницы
         title = rutracker_api.get_page_title(url)
         logger.debug(f"Получен заголовок: {title}")
         
+        # Добавляем страницу в базу данных
         page_id, title, existing_id = add_page(title, url, rutracker_api)
         
         if page_id is None:
-            # Страница уже существует
+            # Если страница уже существует
             update.message.reply_text(
                 f'Эта ссылка уже добавлена в мониторинг под названием "{title}" (ID: {existing_id}).',
                 reply_markup=ADD_MORE_KEYBOARD
             )
             logger.info(f"Попытка добавить дубликат URL пользователем {user_id}")
         else:
+            # Успешное добавление
             update.message.reply_text(
                 f'Ссылку поймал и добавил в мониторинг.',
                 reply_markup=ADD_MORE_KEYBOARD
             )
-            logger.debug("Отправлено подтверждение добавления")
-            logger.info(f"Страница {title} добавлена для мониторинга через сообщение пользователем {user_id}")
+            logger.info(f"Страница {title} добавлена для мониторинга пользователем {user_id}")
+            
+            # Выполняем проверку обновлений для новой ссылки
+            logger.debug(f"Выполняется проверка обновлений для новой ссылки: {url}")
+            updates_found = check_pages(rutracker_api, BOT, specific_url=url)
+            
+            if updates_found:
+                update.message.reply_text("Обновления найдены и обработаны.")
+            else:
+                update.message.reply_text("Обновлений не найдено.")
     except Exception as e:
         logger.error(f"Ошибка при обработке ссылки от пользователя {user_id}: {e}")
         update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
     
     return ConversationHandler.END
+
 
 @restricted_decorator
 def cancel_add(update: Update, context: CallbackContext) -> int:

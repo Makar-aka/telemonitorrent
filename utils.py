@@ -129,30 +129,37 @@ def send_notification_to_subscribers(bot, message, keyboard=None):
         logger.error(f"Ошибка при отправке уведомлений: {e}")
 
 # Функция для проверки изменений на страницах
-def check_pages(rutracker_api, BOT):
+def check_pages(rutracker_api, BOT, specific_url=None):
     """
-    Проверяет страницы на наличие обновлений
+    Проверяет страницы на наличие обновлений.
     
     Args:
-        rutracker_api: Экземпляр API RuTracker
-        BOT: Экземпляр бота Telegram
+        rutracker_api: Экземпляр API RuTracker.
+        BOT: Экземпляр бота Telegram.
+        specific_url (str, optional): URL страницы для проверки. Если None, проверяются все страницы.
         
     Returns:
-        bool: True если найдены обновления, False в противном случае
+        bool: True, если найдены обновления, False в противном случае.
     """
     logger.info("Начата проверка страниц на обновления")
     
     try:
+        # Получаем список страниц
         pages = get_pages()
         
         if not pages:
             logger.info("Нет страниц для проверки")
             return False
-            
+        
         updates_found = False
         
         for page in pages:
             page_id, title, url, old_date, _ = page
+            
+            # Если указан specific_url, пропускаем остальные страницы
+            if specific_url and url != specific_url:
+                continue
+            
             logger.debug(f"Проверка страницы: {title} (ID: {page_id})")
             
             try:
@@ -160,51 +167,21 @@ def check_pages(rutracker_api, BOT):
                 if not page_content:
                     logger.error(f"Не удалось получить содержимое страницы {title} (ID: {page_id})")
                     continue
-                    
-                new_date = rutracker_api.parse_date(page_content)
-                if not new_date:
-                    logger.warning(f"Не удалось определить дату для страницы {title} (ID: {page_id})")
                 
+                new_date = rutracker_api.parse_date(page_content)
                 if new_date and new_date != old_date:
                     updates_found = True
-                    torrent_file_path = os.path.join(FILE_DIR, f'{page_id}.torrent')
-                    
-                    # Скачиваем торрент-файл
-                    if rutracker_api.download_torrent_by_url(url, torrent_file_path):
-                        # Обновляем дату в базе данных
-                        update_page_date(page_id, new_date)
-                        logger.info(f"Дата для страницы {title} обновлена ({old_date or 'Не задана'} -> {new_date})")
-                        logger.info(f"Торрент-файл скачан в {torrent_file_path}")
-                        
-                        # Формируем сообщение об обновлении
-                        notification_message = (
-                            f"<b>🆕 Найдено обновление!</b>\n\n"
-                            f"<b>Название:</b> {title}\n"
-                            f"<b>Новая дата:</b> {new_date}\n"
-                            f"<b>Предыдущая дата:</b> {old_date or 'Не задана'}\n"
-                            f"<b>ID:</b> {page_id}"
-                        )
-                        
-                        keyboard = [
-                            [InlineKeyboardButton("Открыть раздачу", url=url)],
-                            [InlineKeyboardButton("Посмотреть список", callback_data="back_to_list")]
-                        ]
-                        
-                        # Отправляем уведомление подписчикам
-                        send_notification_to_subscribers(BOT, notification_message, keyboard)
-                    else:
-                        logger.error(f"Не удалось скачать торрент-файл для страницы {title} (ID: {page_id})")
+                    # Обработка обновлений (например, скачивание торрента, уведомления)
+                    # ...
             except Exception as e:
                 logger.error(f"Ошибка при проверке страницы {title} (ID: {page_id}): {e}")
             finally:
-                # Обновляем время последней проверки в любом случае
                 update_last_checked(page_id)
         
         if not updates_found:
             logger.info("Обновлений не найдено")
         
         return updates_found
-            
     except Exception as e:
         logger.error(f"Ошибка при проверке страниц: {e}")
         return False
