@@ -161,19 +161,23 @@ def add_url(update: Update, context: CallbackContext) -> int:
             )
             logger.info(f"Страница {title} добавлена для мониторинга пользователем {user_id}")
             
-            # Выполняем проверку обновлений для новой ссылки
-            logger.debug(f"Выполняется проверка обновлений для новой ссылки: {url}")
-            updates_found = check_pages(rutracker_api, BOT, specific_url=url)
+            # Скачиваем торрент-файл
+            logger.debug(f"Попытка скачать торрент-файл для ссылки: {url}")
+            file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+            downloaded_file = rutracker_api.download_torrent_by_url(url, file_path)
             
-            if updates_found:
-                update.message.reply_text("Обновления найдены и обработаны.")
+            if downloaded_file:
+                update.message.reply_text(f"Торрент-файл успешно скачан: {downloaded_file}")
+                logger.info(f"Торрент-файл для страницы {title} скачан и сохранён в {downloaded_file}")
             else:
-                update.message.reply_text("Обновлений не найдено.")
+                update.message.reply_text("Не удалось скачать торрент-файл.")
+                logger.error(f"Ошибка при скачивании торрент-файла для страницы {title}")
     except Exception as e:
         logger.error(f"Ошибка при обработке ссылки от пользователя {user_id}: {e}")
         update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
     
     return ConversationHandler.END
+
 
 
 @restricted_decorator
