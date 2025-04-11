@@ -12,7 +12,9 @@ WORKDIR /app
 RUN mkdir -p /app/files && \
     chown -R appuser:appgroup /app/files
 
-
+RUN touch /app/database.db /app/users.db && \
+    chmod 666 /app/database.db /app/users.db && \
+    chown appuser:appgroup /app/database.db /app/users.db
 
 # Копируем файлы проекта
 COPY . /app
