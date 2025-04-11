@@ -3,8 +3,8 @@ FROM python:3.9-slim
 
 RUN groupadd -g 1000 appgroup && \
     useradd -m -u 1000 -g appgroup appuser
-
-
+    touch bot.log && \
+    chown -R appuser:appgroup .
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
@@ -17,8 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Указываем переменные окружения
 ENV PYTHONUNBUFFERED=1
 
-# Открываем порт (если требуется)
-EXPOSE 8080
 
 # Команда для запуска приложения
 CMD ["python", "bot.py"]
