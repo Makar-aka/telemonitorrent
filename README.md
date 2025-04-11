@@ -10,35 +10,43 @@
 - Python 3.x
 - Библиотеки, указанные в `requirements.txt`
 
-## Установка
+## Установка:
 
-1. Клонируйте репозиторий:
-
+```bash
 git clone https://github.com/Makar-aka/telemonitorrent.git
-
-cd telemonitorrent\
-sudo apt update\
-sudo apt install python3 python3-pip\
+```
+```bash
+cd telemonitorrent
+```
+```bash
+sudo apt update
+```
+```bash
+sudo apt install python3 python3-pip
+```
+```bash
 pip install -r requirements.txt
-
+```
 4. Создайте файл `.env` в корневом каталоге проекта и добавьте в него следующие строки:
 
-BOT_TOKEN=your_bot_token\
-CHECK_INTERVAL=10\
-RUTRACKER_USERNAME=your_username\
-RUTRACKER_PASSWORD=your_password\
-FILE_DIR=files\
-USE_PROXY=false\
-HTTP_PROXY=\
-HTTPS_PROXY=\
-LOG_FILE=bot.log\
-LOG_LEVEL=INFO\
-LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s\
-DB_PATH=database.db\
+```
+BOT_TOKEN=your_bot_token
+CHECK_INTERVAL=10
+RUTRACKER_USERNAME=your_username
+RUTRACKER_PASSWORD=your_password
+FILE_DIR=files
+USE_PROXY=false
+HTTP_PROXY=
+HTTPS_PROXY=
+LOG_FILE=bot.log
+LOG_LEVEL=INFO
+LOG_FORMAT=%(asctime)s - %(name)s - %(levelname)s - %(message)s
+DB_PATH=database.db
 USERS_DB_PATH=users.db
 
 LOG_MAX_BYTES=5120  # 5 MB
 LOG_BACKUP_COUNT=5
+```
 
 ## Запуск
 ### Обычный запуск
