@@ -12,6 +12,8 @@ WORKDIR /app
 RUN mkdir -p /app/files && \
     chown -R appuser:appgroup /app/files
 
+
+
 # Копируем файлы проекта
 COPY . /app
 
