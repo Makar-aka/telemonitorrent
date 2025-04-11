@@ -108,6 +108,9 @@ services:
       - LOG_FILE=${LOG_FILE}
       - LOG_LEVEL=${LOG_LEVEL}
       - LOG_FORMAT=${LOG_FORMAT}
+      - USE_PROXY=${USE_PROXY}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
       - TZ=Europe/Moscow
     volumes:
       - ./files:/files
