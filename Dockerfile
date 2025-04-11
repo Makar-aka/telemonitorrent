@@ -1,6 +1,10 @@
 # Используем официальный образ Python
 FROM python:3.9-slim
 
+RUN groupadd -g 1000 appgroup && \
+    useradd -m -u 1000 -g appgroup appuser
+
+
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
