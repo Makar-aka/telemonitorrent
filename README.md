@@ -89,6 +89,7 @@ sudo systemctl restart telemon.service # Перезапуск
 touch database.db
 touch users.db
 touch bot.log
+mkdir files
 ```
 Создайте файл docker-compose.yml в корневом каталоге проекта и добавьте в него следующие строки:
 
