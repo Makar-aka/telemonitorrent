@@ -44,6 +44,7 @@ LOG_BACKUP_COUNT=5
 ### Обычный запуск
 python3 bot.py
 
+------
 ### Запуск как системный сервис
 1.	Настройте файл сервиса:\
 sudo cp telemon.service /etc/systemd/system/\
@@ -63,7 +64,48 @@ sudo systemctl start telemon.service
 sudo systemctl status telemon.service  # Проверка статуса\
 sudo systemctl stop telemon.service    # Остановка\
 sudo systemctl restart telemon.service # Перезапуск
+------
 
+### Запуск в docker compose
+Создайте м заполние .env
+
+создайте файлы базы и логов в папке с проектом:
+```bash
+touch database.db
+touch users.db
+touch bot.log
+```
+Создайте файл docker-compose.yml в корневом каталоге проекта и добавьте в него следующие строки:
+
+```yaml
+services:
+  bot:
+    build: https://github.com/Makar-aka/telemonitorrent.git
+    container_name: telemonitorrent
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - RUTRACKER_USERNAME=${RUTRACKER_USERNAME}
+      - RUTRACKER_PASSWORD=${RUTRACKER_PASSWORD}
+      - CHECK_INTERVAL=${CHECK_INTERVAL}
+      - FILE_DIR=${FILE_DIR}
+      - DB_PATH=${DB_PATH}
+      - USERS_DB_PATH=${USERS_DB_PATH}
+      - LOG_FILE=${LOG_FILE}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_FORMAT=${LOG_FORMAT}
+      - TZ=Europe/Moscow
+    volumes:
+      - ./files:/files
+      - ./users.db:/app/users.db
+      - ./database.db:/app/database.db
+      - ./bot.log:/app/bot.log
+    user: "1000:1000"
+    restart: always
+```
+Запустите docker-compose:
+```bash 
+docker-compose up -d
+```
 ## Использование
 
 Бот поддерживает следующие команды:

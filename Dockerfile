@@ -7,9 +7,6 @@ RUN groupadd -g 1000 appgroup && \
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-RUN touch /app/bot.log && \
-    chown -R appuser:appgroup .
-
 
 # Копируем файлы проекта
 COPY . /app
