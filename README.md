@@ -50,32 +50,39 @@ LOG_BACKUP_COUNT=5
 
 ## Запуск
 ### Обычный запуск
+```bash
 python3 bot.py
-
+```
 ------
 ### Запуск как системный сервис
-1.	Настройте файл сервиса:\
-sudo cp telemon.service /etc/systemd/system/\
-Поменяйте директории в файле telemon.service на свои. Для этого выполните команду:\
+1.	Настройте файл сервиса:
+```bash
+sudo cp telemon.service /etc/systemd/system/
+```
+Поменяйте директории в файле telemon.service на свои. Для этого выполните команду:
+```
 sudo nano /etc/systemd/system/telemon.service
-sudo systemctl daemon-reload\
-sudo systemctl enable telemon.service\
+sudo systemctl daemon-reload
+sudo systemctl enable telemon.service
 sudo systemctl start telemon.service
-
-2.	Установите сервис:\
+```
+2.	Установите сервис:
+```bash
 sudo cp telemon.service /etc/systemd/system/\
 sudo systemctl daemon-reload\
 sudo systemctl enable telemon.service\
 sudo systemctl start telemon.service
-
-3.	Управление сервисом:\
+```
+3.	Управление сервисом:
+```bash
 sudo systemctl status telemon.service  # Проверка статуса\
 sudo systemctl stop telemon.service    # Остановка\
 sudo systemctl restart telemon.service # Перезапуск
+```
 ------
 
 ### Запуск в docker compose
-Создайте м заполние .env
+Создайте и заполните .env
 
 создайте файлы базы и логов в папке с проектом:
 ```bash
