@@ -632,6 +632,72 @@ def delete_user_cmd(update: Update, context: CallbackContext) -> None:
         logger.warning(f"Некорректный ID пользователя в команде /userdel от {admin_id}")
 
 @admin_required_decorator
+def delete_all_pages(update: Update, context: CallbackContext) -> None:
+    """
+    Удаляет все отслеживаемые ссылки и соответствующие торрент-файлы
+    """
+    user_id = update.effective_user.id
+    logger.debug(f"Команда /dellall от пользователя {user_id}")
+    
+    # Проверка подтверждения
+    if len(context.args) == 1 and context.args[0].lower() == "confirm":
+        confirmed = True
+    else:
+        confirmed = False
+    
+    if not confirmed:
+        update.message.reply_text(
+            'Эта команда удалит ВСЕ отслеживаемые страницы и их торрент-файлы.\n'
+            'Действие необратимо! Для подтверждения введите: /dellall confirm'
+        )
+        return
+    
+    try:
+        # Получаем список всех страниц
+        pages = get_pages()
+        
+        if not pages:
+            update.message.reply_text('Нет страниц для удаления.')
+            logger.info(f"Нет страниц для удаления по команде пользователя {user_id}")
+            return
+        
+        total_pages = len(pages)
+        deleted_pages = 0
+        deleted_files = 0
+        
+        # Удаляем страницы и их файлы
+        for page in pages:
+            page_id, title, _, _, _ = page
+            
+            # Удаляем соответствующий торрент-файл, если он существует
+            file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+            if os.path.exists(file_path):
+                try:
+                    os.remove(file_path)
+                    deleted_files += 1
+                    logger.debug(f"Удален файл: {file_path}")
+                except Exception as e:
+                    logger.error(f"Не удалось удалить файл {file_path}: {e}")
+            
+            # Удаляем страницу из базы данных
+            delete_page(page_id)
+            deleted_pages += 1
+            logger.debug(f"Удалена страница: {title} (ID: {page_id})")
+        
+        result_message = (
+            f"Операция завершена.\n"
+            f"Удалено страниц: {deleted_pages} из {total_pages}\n"
+            f"Удалено файлов: {deleted_files} из {total_pages}"
+        )
+        
+        update.message.reply_text(result_message)
+        logger.info(f"Удаление всех страниц завершено. Удалено страниц: {deleted_pages}, файлов: {deleted_files}")
+    except Exception as e:
+        error_msg = f"Ошибка при удалении всех страниц: {e}"
+        update.message.reply_text(error_msg)
+        logger.error(error_msg)
+
+@admin_required_decorator
 def admin_help_cmd(update: Update, context: CallbackContext) -> None:
     """Показывает список всех доступных команд для администратора"""
     admin_id = update.effective_user.id
@@ -656,10 +722,10 @@ def admin_help_cmd(update: Update, context: CallbackContext) -> None:
     help_text += "/userdel [ID] - Удалить пользователя\n"
     help_text += "/makeadmin [ID] - Сделать пользователя администратором\n"
     help_text += "/removeadmin [ID] - Убрать права администратора\n"
-    help_text += "/help - Показать этот список команд\n\n"
+    help_text += "/help - Показать этот список команд\n"
     help_text += "/force - Принудительная загрузка всех страниц\n"
     help_text += "/clean - Очистить директорию с торрент-файлами\n"
-
+    help_text += "/dellall - Удалить ВСЕ отслеживаемые страницы и их файлы\n"
 
     help_text += "<b>Параметры:</b>\n"
     help_text += "ID - идентификатор пользователя или страницы\n"

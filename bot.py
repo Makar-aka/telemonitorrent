@@ -24,7 +24,7 @@ from handlers import (
     update_page_cmd, check_now, toggle_subscription, subscription_status,
     list_users, make_admin, remove_admin, add_user_cmd, delete_user_cmd,
     user_help_cmd, button, handle_text, set_dependencies, 
-    force_download, clean_files_dir
+    force_download, clean_files_dir, delete_all_pages
 )
 
 # Устанавливаем переменную окружения TZ
@@ -187,7 +187,7 @@ def main() -> None:
         dispatcher.add_handler(CommandHandler("removeadmin", remove_admin))
         dispatcher.add_handler(CommandHandler("adduser", add_user_cmd))
         dispatcher.add_handler(CommandHandler("userdel", delete_user_cmd))
-        
+        dispatcher.add_handler(CommandHandler("dellall", delete_all_pages))
         dispatcher.add_handler(CallbackQueryHandler(button))
         dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
                 
