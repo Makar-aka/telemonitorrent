@@ -51,7 +51,7 @@ logger = logging.getLogger(__name__)
 
 def check_required_env_vars():
     """
-    Проверяет доступность важных ресурсов для работы программы.
+    Проверяет доступность важных ресурсов для работы программы и авторизацию в qBittorrent.
     """
     # Проверка возможности создания директории для файлов
     if not os.path.exists(FILE_DIR):
@@ -72,9 +72,71 @@ def check_required_env_vars():
             print(f"ОШИБКА: Невозможно создать директорию для логов {log_dir}: {e}")
             sys.exit(1)
     
+    # Проверка авторизации в qBittorrent, если включено
+    if QBITTORRENT_ENABLED:
+        if not QBITTORRENT_URL:
+            print("ОШИБКА: Включена интеграция с qBittorrent, но не указан URL (QBITTORRENT_URL)")
+            sys.exit(1)
+        
+        try:
+            check_qbittorrent_auth()
+            print(f"Подключение к qBittorrent успешно настроено ({QBITTORRENT_URL})")
+        except Exception as e:
+            print(f"ОШИБКА: Не удалось подключиться к qBittorrent: {e}")
+            sys.exit(1)
+    
     # Вывод информации о текущих настройках
     print(f"Интервал проверки: {CHECK_INTERVAL} минут")
     print(f"Директория для файлов: {FILE_DIR}")
     print(f"Файл логов: {LOG_FILE}")
     print(f"Уведомления: {'Включены' if NOTIFICATIONS_ENABLED else 'Отключены'}")
     print(f"Временная зона: {TIMEZONE}")
+    print(f"qBittorrent: {'Включен' if QBITTORRENT_ENABLED else 'Отключен'}")
+
+def check_qbittorrent_auth():
+    """
+    Проверяет авторизацию в qBittorrent API.
+    
+    Raises:
+        Exception: Если авторизация не удалась.
+    """
+    import requests
+    
+    if not QBITTORRENT_ENABLED:
+        return
+    
+    if not QBITTORRENT_URL:
+        raise Exception("Не указан URL qBittorrent")
+    
+    try:
+        # Создаем сессию
+        session = requests.Session()
+        
+        # Авторизуемся
+        login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
+        login_data = {
+            "username": QBITTORRENT_USERNAME or "admin",  # Используем значение по умолчанию, если не указано
+            "password": QBITTORRENT_PASSWORD or "adminadmin"  # Используем значение по умолчанию, если не указано
+        }
+        
+        login_response = session.post(login_url, data=login_data, timeout=10)
+        
+        if login_response.status_code != 200:
+            raise Exception(f"Ошибка авторизации. Код статуса: {login_response.status_code}")
+        
+        # Проверяем версию API для подтверждения успешной авторизации
+        api_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
+        api_version_response = session.get(api_version_url, timeout=10)
+        
+        if api_version_response.status_code != 200:
+            raise Exception(f"Ошибка проверки версии API. Код статуса: {api_version_response.status_code}")
+        
+        qbittorrent_version = api_version_response.text
+        print(f"Версия qBittorrent: {qbittorrent_version}")
+        
+    except requests.exceptions.ConnectionError:
+        raise Exception("Не удалось подключиться к qBittorrent. Проверьте URL и доступность сервера.")
+    except requests.exceptions.Timeout:
+        raise Exception("Таймаут подключения к qBittorrent.")
+    except Exception as e:
+        raise Exception(f"Ошибка при авторизации в qBittorrent: {e}")

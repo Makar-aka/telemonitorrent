@@ -208,6 +208,61 @@ def main() -> None:
     except Exception as e:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
         sys.exit(1)
+def check_qbittorrent_auth():
+    """
+    Проверяет авторизацию в qBittorrent API.
+    
+    Returns:
+        bool: True если авторизация успешна, иначе False
+    """
+    import requests
+    
+    if not QBITTORRENT_ENABLED:
+        return True
+    
+    if not QBITTORRENT_URL:
+        logger.error("Не указан URL qBittorrent")
+        return False
+    
+    try:
+        # Создаем сессию
+        session = requests.Session()
+        
+        # Авторизуемся
+        login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
+        login_data = {
+            "username": QBITTORRENT_USERNAME or "admin",
+            "password": QBITTORRENT_PASSWORD or "adminadmin"
+        }
+        
+        logger.debug(f"Попытка авторизации в qBittorrent: {QBITTORRENT_URL}")
+        login_response = session.post(login_url, data=login_data, timeout=10)
+        
+        if login_response.status_code != 200:
+            logger.error(f"Ошибка авторизации в qBittorrent. Код статуса: {login_response.status_code}")
+            return False
+        
+        # Проверяем версию API для подтверждения успешной авторизации
+        api_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
+        api_version_response = session.get(api_version_url, timeout=10)
+        
+        if api_version_response.status_code != 200:
+            logger.error(f"Ошибка проверки версии API qBittorrent. Код статуса: {api_version_response.status_code}")
+            return False
+        
+        qbittorrent_version = api_version_response.text
+        logger.info(f"Версия qBittorrent: {qbittorrent_version}")
+        return True
+        
+    except requests.exceptions.ConnectionError:
+        logger.error("Не удалось подключиться к qBittorrent. Проверьте URL и доступность сервера.")
+        return False
+    except requests.exceptions.Timeout:
+        logger.error("Таймаут подключения к qBittorrent.")
+        return False
+    except Exception as e:
+        logger.error(f"Ошибка при авторизации в qBittorrent: {e}")
+        return False
 
 if __name__ == '__main__':
     main()
