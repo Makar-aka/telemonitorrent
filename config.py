@@ -21,19 +21,19 @@ BOT_TOKEN = get_env_var('BOT_TOKEN')
 LOG_LEVEL = get_env_var('LOG_LEVEL')
 LOG_FORMAT = get_env_var('LOG_FORMAT')
 LOG_FILE = get_env_var('LOG_FILE')
-LOG_MAX_BYTES = int(os.environ.get('LOG_MAX_BYTES', 10485760))  # 10 MB по умолчанию
-LOG_BACKUP_COUNT = int(os.environ.get('LOG_BACKUP_COUNT', 5))  # 5 резервных копий по умолчанию
+LOG_MAX_BYTES = int(os.environ.get('LOG_MAX_BYTES'))  
+LOG_BACKUP_COUNT = int(os.environ.get('LOG_BACKUP_COUNT'))
 RUTRACKER_USERNAME = get_env_var('RUTRACKER_USERNAME')
 RUTRACKER_PASSWORD = get_env_var('RUTRACKER_PASSWORD')
 FILE_DIR = get_env_var('FILE_DIR')
 NOTIFICATIONS_ENABLED = os.environ.get('NOTIFICATIONS_ENABLED', 'True').lower() == 'true'
-USE_PROXY = os.environ.get('USE_PROXY', 'false').lower() == 'true'
+USE_PROXY = os.environ.get('USE_PROXY').lower() == 'true'
 HTTP_PROXY = os.environ.get('HTTP_PROXY', '')
 HTTPS_PROXY = os.environ.get('HTTPS_PROXY', '')
 TIMEZONE = os.environ.get('TIMEZONE', 'UTC')
 
 # Настройки qBittorrent
-QBITTORRENT_ENABLED = os.environ.get('QBITTORRENT_ENABLED', 'false').lower() == 'true'
+QBITTORRENT_ENABLED = os.environ.get('QBITTORRENT_ENABLED').lower() == 'true'
 QBITTORRENT_URL = os.environ.get('QBITTORRENT_URL')
 QBITTORRENT_USERNAME = os.environ.get('QBITTORRENT_USERNAME')
 QBITTORRENT_PASSWORD = os.environ.get('QBITTORRENT_PASSWORD')
@@ -51,9 +51,7 @@ WAITING_URL = 1
 logger = logging.getLogger(__name__)
 
 def check_qbittorrent_connection():
-    """
-    Проверяет подключение к qBittorrent, если эта функция включена в настройках.
-    """
+  
     global QBITTORRENT_ENABLED  # Объявляем переменную как глобальную в начале функции
     
     if not QBITTORRENT_ENABLED:
@@ -81,9 +79,7 @@ def check_qbittorrent_connection():
     QBITTORRENT_ENABLED = False
 
 def check_required_env_vars():
-    """
-    Проверяет доступность важных ресурсов для работы программы.
-    """
+  
     # Проверка возможности создания директории для файлов
     if not os.path.exists(FILE_DIR):
         try:
