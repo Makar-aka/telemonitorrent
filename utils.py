@@ -138,7 +138,21 @@ def check_qbittorrent_auth():
         logger.error("Не указан URL qBittorrent")
         return False
     
+    # Сохраняем оригинальные значения прокси
+    original_http_proxy = os.environ.get('HTTP_PROXY')
+    original_https_proxy = os.environ.get('HTTPS_PROXY')
+    
     try:
+        # Временно удаляем переменные окружения прокси
+        if 'HTTP_PROXY' in os.environ:
+            del os.environ['HTTP_PROXY']
+        if 'HTTPS_PROXY' in os.environ:
+            del os.environ['HTTPS_PROXY']
+        if 'http_proxy' in os.environ:
+            del os.environ['http_proxy']
+        if 'https_proxy' in os.environ:
+            del os.environ['https_proxy']
+        
         # Создаем сессию с явным отключением прокси
         session = requests.Session()
         # Явно отключаем прокси для qBittorrent
@@ -219,6 +233,13 @@ def check_qbittorrent_auth():
     except Exception as e:
         logger.error(f"Непредвиденная ошибка при авторизации в qBittorrent: {e}")
         return False
+    finally:
+        # Восстанавливаем прокси-настройки
+        if original_http_proxy:
+            os.environ['HTTP_PROXY'] = original_http_proxy
+        if original_https_proxy:
+            os.environ['HTTPS_PROXY'] = original_https_proxy
+
 
 # Функция для проверки изменений на страницах
 def check_pages(rutracker_api, BOT, specific_url=None):
@@ -348,7 +369,21 @@ def upload_to_qbittorrent(file_path):
         logger.debug("Загрузка в qBittorrent отключена в настройках")
         return False
     
+    # Сохраняем оригинальные значения прокси
+    original_http_proxy = os.environ.get('HTTP_PROXY')
+    original_https_proxy = os.environ.get('HTTPS_PROXY')
+    
     try:
+        # Временно удаляем переменные окружения прокси
+        if 'HTTP_PROXY' in os.environ:
+            del os.environ['HTTP_PROXY']
+        if 'HTTPS_PROXY' in os.environ:
+            del os.environ['HTTPS_PROXY']
+        if 'http_proxy' in os.environ:
+            del os.environ['http_proxy']
+        if 'https_proxy' in os.environ:
+            del os.environ['https_proxy']
+            
         # Создаем сессию
         session = requests.Session()
         # Явно отключаем прокси для qBittorrent
@@ -391,3 +426,9 @@ def upload_to_qbittorrent(file_path):
     except Exception as e:
         logger.error(f"Ошибка при отправке торрент-файла в qBittorrent: {e}")
         return False
+    finally:
+        # Восстанавливаем прокси-настройки
+        if original_http_proxy:
+            os.environ['HTTP_PROXY'] = original_http_proxy
+        if original_https_proxy:
+            os.environ['HTTPS_PROXY'] = original_https_proxy
