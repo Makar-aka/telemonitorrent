@@ -209,13 +209,9 @@ def main() -> None:
         logger.critical(f"Критическая ошибка при запуске бота: {e}", exc_info=True)
         sys.exit(1)
 def check_qbittorrent_auth():
-    """
-    Проверяет авторизацию в qBittorrent API.
-    
-    Returns:
-        bool: True если авторизация успешна, иначе False
-    """
+ 
     import requests
+    import urllib.parse
     
     if not QBITTORRENT_ENABLED:
         return True
@@ -228,29 +224,70 @@ def check_qbittorrent_auth():
         # Создаем сессию
         session = requests.Session()
         
+        # Проверяем версию API
+        try:
+            logger.debug(f"Проверка доступности qBittorrent API: {QBITTORRENT_URL}")
+            api_version_url = f"{QBITTORRENT_URL}/api/v2/app/webapiVersion"
+            api_version_response = session.get(api_version_url, timeout=10)
+            
+            if api_version_response.status_code == 200:
+                logger.info(f"Версия WebAPI qBittorrent: {api_version_response.text}")
+            else:
+                logger.warning(f"Не удалось получить версию WebAPI. Код: {api_version_response.status_code}")
+        except Exception as e:
+            logger.warning(f"Ошибка при проверке версии API: {e}")
+        
         # Авторизуемся
         login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
-        login_data = {
+        
+        # Подготовка данных формы (application/x-www-form-urlencoded)
+        form_data = {
             "username": QBITTORRENT_USERNAME or "admin",
             "password": QBITTORRENT_PASSWORD or "adminadmin"
         }
         
-        logger.debug(f"Попытка авторизации в qBittorrent: {QBITTORRENT_URL}")
-        login_response = session.post(login_url, data=login_data, timeout=10)
+        # Кодируем данные в формате application/x-www-form-urlencoded
+        encoded_data = urllib.parse.urlencode(form_data)
+        headers = {
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        
+        logger.debug(f"Попытка авторизации в qBittorrent: {login_url}")
+        login_response = session.post(
+            login_url, 
+            data=encoded_data,
+            headers=headers,
+            timeout=10
+        )
+        
+        logger.debug(f"Ответ сервера: {login_response.status_code} - {login_response.text}")
         
         if login_response.status_code != 200:
             logger.error(f"Ошибка авторизации в qBittorrent. Код статуса: {login_response.status_code}")
+            
+            # Проверим, возможно требуется другой формат данных
+            logger.debug("Пробуем альтернативный формат запроса...")
+            alt_login_response = session.post(
+                login_url,
+                data=form_data,  # Используем словарь напрямую
+                timeout=10
+            )
+            
+            if alt_login_response.status_code != 200:
+                logger.error(f"Альтернативная попытка не удалась. Код: {alt_login_response.status_code}")
+                return False
+            else:
+                logger.info("Альтернативная попытка авторизации успешна")
+        
+        # Проверяем наличие сессии, запросив информацию о версии
+        app_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
+        app_version_response = session.get(app_version_url, timeout=10)
+        
+        if app_version_response.status_code != 200:
+            logger.error(f"Ошибка проверки версии qBittorrent. Код статуса: {app_version_response.status_code}")
             return False
         
-        # Проверяем версию API для подтверждения успешной авторизации
-        api_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
-        api_version_response = session.get(api_version_url, timeout=10)
-        
-        if api_version_response.status_code != 200:
-            logger.error(f"Ошибка проверки версии API qBittorrent. Код статуса: {api_version_response.status_code}")
-            return False
-        
-        qbittorrent_version = api_version_response.text
+        qbittorrent_version = app_version_response.text
         logger.info(f"Версия qBittorrent: {qbittorrent_version}")
         return True
         
@@ -263,6 +300,7 @@ def check_qbittorrent_auth():
     except Exception as e:
         logger.error(f"Ошибка при авторизации в qBittorrent: {e}")
         return False
+
 
 if __name__ == '__main__':
     main()
