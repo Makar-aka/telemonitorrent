@@ -138,8 +138,10 @@ def check_qbittorrent_auth():
         return False
     
     try:
-        # Создаем сессию
+        # Создаем сессию с явным отключением прокси
         session = requests.Session()
+        # Явно отключаем прокси для qBittorrent
+        session.proxies = {'http': None, 'https': None}
         
         # Проверяем сначала доступность API без авторизации
         try:
@@ -194,23 +196,7 @@ def check_qbittorrent_auth():
             
             if login_response.status_code != 200:
                 logger.debug(f"Авторизация не удалась (способ 2). Код: {login_response.status_code}")
-                
-                # Способ 3: Пробуем через другой путь API (для старых версий)
-                alt_login_url = f"{QBITTORRENT_URL}/login"
-                logger.debug(f"Попытка авторизации в qBittorrent (способ 3): {alt_login_url}")
-                login_response = session.post(
-                    alt_login_url,
-                    data=form_data,
-                    timeout=10
-                )
-                
-                if login_response.status_code != 200:
-                    logger.error("Все попытки авторизации не удались")
-                    return False
-                else:
-                    logger.debug("Авторизация в qBittorrent успешна (способ 3)")
-            else:
-                logger.debug("Авторизация в qBittorrent успешна (способ 2)")
+                return False
         
         # Проверяем авторизацию, запросив информацию о клиенте
         check_url = f"{QBITTORRENT_URL}/api/v2/app/version"
@@ -232,19 +218,10 @@ def check_qbittorrent_auth():
     except Exception as e:
         logger.error(f"Непредвиденная ошибка при авторизации в qBittorrent: {e}")
         return False
+
 # Функция для проверки изменений на страницах
 def check_pages(rutracker_api, BOT, specific_url=None):
-    """
-    Проверяет все страницы (или конкретную страницу) на наличие обновлений
     
-    Args:
-        rutracker_api: Экземпляр API Rutracker
-        BOT: Экземпляр бота Telegram
-        specific_url: Конкретный URL для проверки (опционально)
-        
-    Returns:
-        bool: True если найдены обновления, иначе False
-    """
     logger.info("Начата проверка страниц на обновления")
     
     try:
@@ -350,7 +327,15 @@ def admin_required(user_exists_func, add_user_func, get_users_func):
     return decorator
 
 def upload_to_qbittorrent(file_path):
+    """
+    Отправляет торрент-файл в qBittorrent через веб-интерфейс
     
+    Args:
+        file_path (str): Путь к торрент-файлу
+        
+    Returns:
+        bool: True если отправка успешна, иначе False
+    """
     import requests
     from config import (
         QBITTORRENT_ENABLED, QBITTORRENT_URL, QBITTORRENT_USERNAME, 
@@ -365,6 +350,8 @@ def upload_to_qbittorrent(file_path):
     try:
         # Создаем сессию
         session = requests.Session()
+        # Явно отключаем прокси для qBittorrent
+        session.proxies = {'http': None, 'https': None}
         
         # Авторизуемся
         login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
