@@ -284,6 +284,127 @@ def check_now(update: Update, context: CallbackContext) -> None:
     
     logger.info(f"Завершена ручная проверка страниц пользователем {user_id}. Результат: {updates_found}")
 
+@admin_required_decorator
+def force_download(update: Update, context: CallbackContext) -> None:
+    """
+    Принудительно загружает все отслеживаемые страницы, независимо от даты обновления
+    """
+    user_id = update.effective_user.id
+    logger.debug(f"Команда /force от пользователя {user_id}")
+    
+    update.message.reply_text('Начинаю принудительную загрузку всех отслеживаемых страниц...')
+    logger.debug("Запуск принудительной загрузки всех страниц")
+    
+    # Получаем все страницы из БД
+    pages = get_pages()
+    
+    if not pages:
+        update.message.reply_text('Нет страниц для загрузки.')
+        logger.info("Нет страниц для принудительной загрузки")
+        return
+    
+    total_pages = len(pages)
+    success_count = 0
+    error_count = 0
+    
+    # Отправляем статусное сообщение
+    status_msg = update.message.reply_text(f"Загрузка торрентов: 0/{total_pages}")
+    
+    for idx, page in enumerate(pages, 1):
+        page_id, title, url, _, _ = page
+        
+        try:
+            logger.debug(f"Принудительная загрузка страницы: {title} (ID: {page_id})")
+            
+            # Скачиваем торрент-файл
+            file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+            torrent_file_path = rutracker_api.download_torrent_by_url(url, file_path)
+            
+            if torrent_file_path:
+                # Отправляем торрент-файл в qBittorrent
+                qbit_result = upload_to_qbittorrent(torrent_file_path)
+                if qbit_result:
+                    logger.info(f"Торрент-файл для страницы {title} загружен и отправлен в qBittorrent")
+                    success_count += 1
+                else:
+                    logger.warning(f"Торрент-файл загружен, но не отправлен в qBittorrent: {title}")
+                    error_count += 1
+            else:
+                logger.error(f"Не удалось загрузить торрент-файл для страницы {title}")
+                error_count += 1
+                
+            # Обновляем время последней проверки
+            update_last_checked(page_id)
+            
+            # Обновляем статусное сообщение каждые несколько страниц или в конце
+            if idx % 5 == 0 or idx == total_pages:
+                try:
+                    context.bot.edit_message_text(
+                        chat_id=status_msg.chat_id,
+                        message_id=status_msg.message_id,
+                        text=f"Загрузка торрентов: {idx}/{total_pages}"
+                    )
+                except Exception:
+                    # Игнорируем ошибки редактирования сообщения
+                    pass
+                
+        except Exception as e:
+            logger.error(f"Ошибка при загрузке страницы {title}: {e}")
+            error_count += 1
+    
+    # Отправляем итоговое сообщение
+    result_message = (
+        f"Принудительная загрузка завершена.\n"
+        f"Всего страниц: {total_pages}\n"
+        f"Успешно: {success_count}\n"
+        f"С ошибками: {error_count}"
+    )
+    
+    update.message.reply_text(result_message)
+    logger.info(f"Принудительная загрузка завершена. Успешно: {success_count}, С ошибками: {error_count}")
+
+@admin_required_decorator
+def clean_files_dir(update: Update, context: CallbackContext) -> None:
+    """
+    Очищает директорию с торрент-файлами
+    """
+    user_id = update.effective_user.id
+    logger.debug(f"Команда /clean от пользователя {user_id}")
+    
+    # Проверка подтверждения
+    if len(context.args) == 1 and context.args[0].lower() == "confirm":
+        confirmed = True
+    else:
+        confirmed = False
+    
+    if not confirmed:
+        update.message.reply_text(
+            'Эта команда удалит все файлы из папки торрентов.\n'
+            'Для подтверждения введите: /clean confirm'
+        )
+        return
+    
+    try:
+        # Удаляем все файлы .torrent из FILE_DIR
+        file_count = 0
+        for filename in os.listdir(FILE_DIR):
+            if filename.endswith(".torrent"):
+                file_path = os.path.join(FILE_DIR, filename)
+                try:
+                    os.remove(file_path)
+                    file_count += 1
+                    logger.debug(f"Удален файл: {file_path}")
+                except Exception as e:
+                    logger.error(f"Не удалось удалить файл {file_path}: {e}")
+        
+        update.message.reply_text(f'Директория очищена. Удалено файлов: {file_count}')
+        logger.info(f"Директория {FILE_DIR} очищена. Удалено {file_count} файлов пользователем {user_id}")
+    except Exception as e:
+        error_msg = f"Ошибка при очистке директории: {e}"
+        update.message.reply_text(error_msg)
+        logger.error(error_msg)
+
+
 # Команда для управления подпиской
 @restricted_decorator
 def toggle_subscription(update: Update, context: CallbackContext) -> None:
@@ -536,7 +657,10 @@ def admin_help_cmd(update: Update, context: CallbackContext) -> None:
     help_text += "/makeadmin [ID] - Сделать пользователя администратором\n"
     help_text += "/removeadmin [ID] - Убрать права администратора\n"
     help_text += "/help - Показать этот список команд\n\n"
-    
+    help_text += "/force - Принудительная загрузка всех страниц\n"
+    help_text += "/clean - Очистить директорию с торрент-файлами\n"
+
+
     help_text += "<b>Параметры:</b>\n"
     help_text += "ID - идентификатор пользователя или страницы\n"
     help_text += "is_admin - права администратора (0 или 1)\n"

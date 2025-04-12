@@ -23,7 +23,8 @@ from handlers import (
     start, add_with_arg, add_start, add_url, cancel_add, list_pages, 
     update_page_cmd, check_now, toggle_subscription, subscription_status,
     list_users, make_admin, remove_admin, add_user_cmd, delete_user_cmd,
-    user_help_cmd, button, handle_text, set_dependencies
+    user_help_cmd, button, handle_text, set_dependencies, 
+    force_download, clean_files_dir
 )
 
 # Устанавливаем переменную окружения TZ
@@ -189,6 +190,9 @@ def main() -> None:
         
         dispatcher.add_handler(CallbackQueryHandler(button))
         dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle_text))
+                
+        dispatcher.add_handler(CommandHandler("force", force_download))
+        dispatcher.add_handler(CommandHandler("clean", clean_files_dir))
         logger.debug("Все обработчики команд зарегистрированы")
 
         # Настройка и запуск планировщика задач
