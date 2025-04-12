@@ -119,13 +119,12 @@ def send_notification_to_subscribers(bot, message, keyboard=None):
         logger.error(f"Ошибка при отправке уведомлений: {e}")
 def check_qbittorrent_auth():
     """
-    Проверяет авторизацию в qBittorrent API.
+    Проверяет авторизацию в qBittorrent API используя библиотеку python-qbittorrent.
     
     Returns:
         bool: True если авторизация успешна, иначе False
     """
-    import requests
-    import urllib.parse
+    from qbittorrent import Client
     from config import (
         QBITTORRENT_ENABLED, QBITTORRENT_URL, QBITTORRENT_USERNAME, 
         QBITTORRENT_PASSWORD, logger
@@ -152,87 +151,158 @@ def check_qbittorrent_auth():
             del os.environ['http_proxy']
         if 'https_proxy' in os.environ:
             del os.environ['https_proxy']
-        
-        # Создаем сессию с явным отключением прокси
-        session = requests.Session()
-        # Явно отключаем прокси для qBittorrent
-        session.proxies = {'http': None, 'https': None}
-        
-        # Проверяем сначала доступность API без авторизации
-        try:
-            logger.debug(f"Проверка доступности qBittorrent API: {QBITTORRENT_URL}")
-            api_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
-            api_version_response = session.get(api_version_url, timeout=10)
             
-            if api_version_response.status_code == 200:
-                logger.info(f"qBittorrent доступен, версия: {api_version_response.text}")
-            else:
-                logger.warning(f"qBittorrent API недоступен. Код: {api_version_response.status_code}")
-                return False
-        except Exception as e:
-            logger.warning(f"Ошибка при проверке API qBittorrent: {e}")
-            return False
+        logger.debug(f"Проверка подключения к qBittorrent: {QBITTORRENT_URL}")
+        
+        # Создаем клиент qBittorrent
+        qbt_client = Client(QBITTORRENT_URL)
         
         # Авторизуемся
-        login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
-        
-        # Подготовка данных авторизации
-        form_data = {
-            "username": QBITTORRENT_USERNAME or "admin",
-            "password": QBITTORRENT_PASSWORD or "adminadmin"
-        }
-        
-        # Пробуем различные способы отправки данных для поддержки разных версий qBittorrent
-        
-        # Способ 1: Стандартный для большинства новых версий
-        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
-        encoded_data = urllib.parse.urlencode(form_data)
-        
-        logger.debug(f"Попытка авторизации в qBittorrent (способ 1)")
-        login_response = session.post(
-            login_url, 
-            data=encoded_data,
-            headers=headers,
-            timeout=10
+        qbt_client.login(
+            QBITTORRENT_USERNAME or "admin",
+            QBITTORRENT_PASSWORD or "adminadmin"
         )
         
-        if login_response.status_code == 200:
-            logger.debug("Авторизация в qBittorrent успешна (способ 1)")
-        else:
-            logger.debug(f"Авторизация не удалась (способ 1). Код: {login_response.status_code}")
-            
-            # Способ 2: Прямая передача данных формы
-            logger.debug(f"Попытка авторизации в qBittorrent (способ 2)")
-            login_response = session.post(
-                login_url,
-                data=form_data,
-                timeout=10
-            )
-            
-            if login_response.status_code != 200:
-                logger.debug(f"Авторизация не удалась (способ 2). Код: {login_response.status_code}")
-                return False
+        # Если мы дошли до этой точки без исключений, авторизация успешна
+        # Проверим версию, чтобы убедиться, что соединение работает
+        version = qbt_client.app_version()
+        logger.info(f"Подключение к qBittorrent успешно. Версия: {version}")
         
-        # Проверяем авторизацию, запросив информацию о клиенте
-        check_url = f"{QBITTORRENT_URL}/api/v2/app/version"
-        check_response = session.get(check_url, timeout=10)
+        # Получим дополнительную информацию для логов
+        webapi_version = qbt_client.app_webapiVersion()
+        logger.info(f"Версия WebAPI qBittorrent: {webapi_version}")
         
-        if check_response.status_code == 200:
-            logger.info(f"Авторизация в qBittorrent подтверждена, версия: {check_response.text}")
-            return True
-        else:
-            logger.error(f"Ошибка проверки авторизации в qBittorrent. Код: {check_response.status_code}")
-            return False
-            
-    except requests.exceptions.ConnectionError:
-        logger.error(f"Не удалось подключиться к qBittorrent по адресу {QBITTORRENT_URL}")
-        return False
-    except requests.exceptions.Timeout:
-        logger.error("Таймаут подключения к qBittorrent")
-        return False
+        return True
+        
     except Exception as e:
-        logger.error(f"Непредвиденная ошибка при авторизации в qBittorrent: {e}")
+        logger.error(f"Ошибка при подключении к qBittorrent: {e}")
         return False
+    finally:
+        # Восстанавливаем прокси-настройки
+        if original_http_proxy:
+            os.environ['HTTP_PROXY'] = original_http_proxy
+        if original_https_proxy:
+            os.environ['HTTPS_PROXY'] = original_https_proxy
+
+
+def upload_to_qbittorrent(file_path):
+    """
+    Отправляет торрент-файл в qBittorrent через библиотеку python-qbittorrent
+    
+    Args:
+        file_path (str): Путь к торрент-файлу
+        
+    Returns:
+        bool: True если отправка успешна, иначе False
+    """
+    from qbittorrent import Client
+    from config import (
+        QBITTORRENT_ENABLED, QBITTORRENT_URL, QBITTORRENT_USERNAME, 
+        QBITTORRENT_PASSWORD, QBITTORRENT_CATEGORY, QBITTORRENT_SAVE_PATH,
+        logger
+    )
+    
+    if not QBITTORRENT_ENABLED:
+        logger.debug("Загрузка в qBittorrent отключена в настройках")
+        return False
+    
+    # Сохраняем оригинальные значения прокси
+    original_http_proxy = os.environ.get('HTTP_PROXY')
+    original_https_proxy = os.environ.get('HTTPS_PROXY')
+    
+    try:
+        # Временно удаляем переменные окружения прокси
+        if 'HTTP_PROXY' in os.environ:
+            del os.environ['HTTP_PROXY']
+        if 'HTTPS_PROXY' in os.environ:
+            del os.environ['HTTPS_PROXY']
+        if 'http_proxy' in os.environ:
+            del os.environ['http_proxy']
+        if 'https_proxy' in os.environ:
+            del os.environ['https_proxy']
+        
+        logger.debug(f"Подключение к qBittorrent для загрузки файла: {file_path}")
+        
+        # Создаем клиент qBittorrent
+        qbt_client = Client(QBITTORRENT_URL)
+        
+        # Авторизуемся
+        qbt_client.login(QBITTORRENT_USERNAME, QBITTORRENT_PASSWORD)
+        
+        # Подготавливаем параметры для загрузки торрента
+        options = {}
+        
+        if QBITTORRENT_CATEGORY:
+            options['category'] = QBITTORRENT_CATEGORY
+            
+        if QBITTORRENT_SAVE_PATH:
+            options['savepath'] = QBITTORRENT_SAVE_PATH
+            
+        # Добавляем дополнительные полезные опции
+        options['skip_checking'] = True  # Пропустить проверку данных при добавлении
+        
+        # Открываем файл и загружаем его
+        with open(file_path, 'rb') as torrent_file:
+            # Используем метод из библиотеки для загрузки торрент-файла
+            qbt_client.download_from_file(torrent_file, **options)
+            
+        logger.info(f"Торрент-файл {os.path.basename(file_path)} успешно добавлен в qBittorrent")
+        
+        # Дополнительно можно вывести информацию о количестве текущих торрентов
+        torrents_count = len(qbt_client.torrents())
+        logger.debug(f"Всего торрентов в qBittorrent: {torrents_count}")
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Ошибка при загрузке торрента в qBittorrent: {e}")
+        return False
+    finally:
+        # Восстанавливаем прокси-настройки
+        if original_http_proxy:
+            os.environ['HTTP_PROXY'] = original_http_proxy
+        if original_https_proxy:
+            os.environ['HTTPS_PROXY'] = original_https_proxy
+
+def get_qbittorrent_client():
+    """
+    Создает и настраивает клиент qBittorrent с управлением прокси
+    
+    Returns:
+        Client: Настроенный и авторизованный клиент qBittorrent или None при ошибке
+    """
+    from qbittorrent import Client
+    from config import (
+        QBITTORRENT_ENABLED, QBITTORRENT_URL, QBITTORRENT_USERNAME, 
+        QBITTORRENT_PASSWORD, logger
+    )
+    
+    if not QBITTORRENT_ENABLED or not QBITTORRENT_URL:
+        return None
+    
+    # Сохраняем оригинальные значения прокси
+    original_http_proxy = os.environ.get('HTTP_PROXY')
+    original_https_proxy = os.environ.get('HTTPS_PROXY')
+    
+    try:
+        # Временно удаляем переменные окружения прокси
+        if 'HTTP_PROXY' in os.environ:
+            del os.environ['HTTP_PROXY']
+        if 'HTTPS_PROXY' in os.environ:
+            del os.environ['HTTPS_PROXY']
+        if 'http_proxy' in os.environ:
+            del os.environ['http_proxy']
+        if 'https_proxy' in os.environ:
+            del os.environ['https_proxy']
+        
+        # Создаем и настраиваем клиент
+        client = Client(QBITTORRENT_URL)
+        client.login(QBITTORRENT_USERNAME, QBITTORRENT_PASSWORD)
+        
+        return client
+    except Exception as e:
+        logger.error(f"Не удалось создать клиент qBittorrent: {e}")
+        return None
     finally:
         # Восстанавливаем прокси-настройки
         if original_http_proxy:
@@ -432,3 +502,35 @@ def upload_to_qbittorrent(file_path):
             os.environ['HTTP_PROXY'] = original_http_proxy
         if original_https_proxy:
             os.environ['HTTPS_PROXY'] = original_https_proxy
+
+def get_torrent_status(torrent_hash=None):
+    """
+    Получает информацию о статусе торрента или всех торрентов в qBittorrent
+    
+    Args:
+        torrent_hash (str, optional): Хеш торрента для получения информации
+        
+    Returns:
+        dict/list: Информация о торренте или список всех торрентов
+    """
+    client = get_qbittorrent_client()
+    
+    if not client:
+        return None
+    
+    try:
+        if torrent_hash:
+            # Получаем список всех торрентов
+            all_torrents = client.torrents()
+            
+            # Находим нужный торрент по хешу
+            for torrent in all_torrents:
+                if torrent.get('hash', '').lower() == torrent_hash.lower():
+                    return torrent
+            return None
+        else:
+            # Возвращаем информацию обо всех торрентах
+            return client.torrents()
+    except Exception as e:
+        logger.error(f"Ошибка при получении информации о торрентах: {e}")
+        return None
