@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import logging
 from dotenv import load_dotenv
 
@@ -51,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 def check_required_env_vars():
     """
-    Проверяет доступность важных ресурсов для работы программы и авторизацию в qBittorrent.
+    Проверяет доступность важных ресурсов для работы программы.
     """
     # Проверка возможности создания директории для файлов
     if not os.path.exists(FILE_DIR):
@@ -72,71 +73,43 @@ def check_required_env_vars():
             print(f"ОШИБКА: Невозможно создать директорию для логов {log_dir}: {e}")
             sys.exit(1)
     
-    # Проверка авторизации в qBittorrent, если включено
+    # Проверяем подключение к qBittorrent, если функция включена
     if QBITTORRENT_ENABLED:
-        if not QBITTORRENT_URL:
-            print("ОШИБКА: Включена интеграция с qBittorrent, но не указан URL (QBITTORRENT_URL)")
-            sys.exit(1)
-        
-        try:
-            check_qbittorrent_auth()
-            print(f"Подключение к qBittorrent успешно настроено ({QBITTORRENT_URL})")
-        except Exception as e:
-            print(f"ОШИБКА: Не удалось подключиться к qBittorrent: {e}")
-            sys.exit(1)
+        check_qbittorrent_connection()
     
     # Вывод информации о текущих настройках
     print(f"Интервал проверки: {CHECK_INTERVAL} минут")
     print(f"Директория для файлов: {FILE_DIR}")
     print(f"Файл логов: {LOG_FILE}")
     print(f"Уведомления: {'Включены' if NOTIFICATIONS_ENABLED else 'Отключены'}")
-    print(f"Временная зона: {TIMEZONE}")
     print(f"qBittorrent: {'Включен' if QBITTORRENT_ENABLED else 'Отключен'}")
+    print(f"Временная зона: {TIMEZONE}")
 
-def check_qbittorrent_auth():
+def check_qbittorrent_connection():
     """
-    Проверяет авторизацию в qBittorrent API.
-    
-    Raises:
-        Exception: Если авторизация не удалась.
+    Проверяет подключение к qBittorrent, если эта функция включена в настройках.
     """
-    import requests
-    
     if not QBITTORRENT_ENABLED:
+        logger.info("Интеграция с qBittorrent отключена")
         return
+        
+    logger.info("Проверка подключения к qBittorrent...")
     
-    if not QBITTORRENT_URL:
-        raise Exception("Не указан URL qBittorrent")
+    # Импортируем функцию проверки авторизации из utils, а не из bot
+    # чтобы избежать циклического импорта
+    from utils import check_qbittorrent_auth
     
-    try:
-        # Создаем сессию
-        session = requests.Session()
-        
-        # Авторизуемся
-        login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
-        login_data = {
-            "username": QBITTORRENT_USERNAME or "admin",  # Используем значение по умолчанию, если не указано
-            "password": QBITTORRENT_PASSWORD or "adminadmin"  # Используем значение по умолчанию, если не указано
-        }
-        
-        login_response = session.post(login_url, data=login_data, timeout=10)
-        
-        if login_response.status_code != 200:
-            raise Exception(f"Ошибка авторизации. Код статуса: {login_response.status_code}")
-        
-        # Проверяем версию API для подтверждения успешной авторизации
-        api_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
-        api_version_response = session.get(api_version_url, timeout=10)
-        
-        if api_version_response.status_code != 200:
-            raise Exception(f"Ошибка проверки версии API. Код статуса: {api_version_response.status_code}")
-        
-        qbittorrent_version = api_version_response.text
-        print(f"Версия qBittorrent: {qbittorrent_version}")
-        
-    except requests.exceptions.ConnectionError:
-        raise Exception("Не удалось подключиться к qBittorrent. Проверьте URL и доступность сервера.")
-    except requests.exceptions.Timeout:
-        raise Exception("Таймаут подключения к qBittorrent.")
-    except Exception as e:
-        raise Exception(f"Ошибка при авторизации в qBittorrent: {e}")
+    # Трехкратная попытка подключения с интервалом 5 секунд
+    for attempt in range(3):
+        if attempt > 0:
+            logger.info(f"Повторная попытка подключения к qBittorrent ({attempt+1}/3)...")
+            time.sleep(5)
+            
+        if check_qbittorrent_auth():
+            logger.info(f"Подключение к qBittorrent успешно установлено: {QBITTORRENT_URL}")
+            return
+    
+    # Если все попытки не удались
+    logger.warning("Не удалось подключиться к qBittorrent. Функция загрузки торрентов будет отключена")
+    global QBITTORRENT_ENABLED
+    QBITTORRENT_ENABLED = False

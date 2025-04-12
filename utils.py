@@ -116,7 +116,122 @@ def send_notification_to_subscribers(bot, message, keyboard=None):
         logger.info(f"Отправлено уведомлений: {success_count} из {len(subscribers)}")
     except Exception as e:
         logger.error(f"Ошибка при отправке уведомлений: {e}")
-
+def check_qbittorrent_auth():
+    """
+    Проверяет авторизацию в qBittorrent API.
+    
+    Returns:
+        bool: True если авторизация успешна, иначе False
+    """
+    import requests
+    import urllib.parse
+    from config import (
+        QBITTORRENT_ENABLED, QBITTORRENT_URL, QBITTORRENT_USERNAME, 
+        QBITTORRENT_PASSWORD, logger
+    )
+    
+    if not QBITTORRENT_ENABLED:
+        return True
+    
+    if not QBITTORRENT_URL:
+        logger.error("Не указан URL qBittorrent")
+        return False
+    
+    try:
+        # Создаем сессию
+        session = requests.Session()
+        
+        # Проверяем сначала доступность API без авторизации
+        try:
+            logger.debug(f"Проверка доступности qBittorrent API: {QBITTORRENT_URL}")
+            api_version_url = f"{QBITTORRENT_URL}/api/v2/app/version"
+            api_version_response = session.get(api_version_url, timeout=10)
+            
+            if api_version_response.status_code == 200:
+                logger.info(f"qBittorrent доступен, версия: {api_version_response.text}")
+            else:
+                logger.warning(f"qBittorrent API недоступен. Код: {api_version_response.status_code}")
+                return False
+        except Exception as e:
+            logger.warning(f"Ошибка при проверке API qBittorrent: {e}")
+            return False
+        
+        # Авторизуемся
+        login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
+        
+        # Подготовка данных авторизации
+        form_data = {
+            "username": QBITTORRENT_USERNAME or "admin",
+            "password": QBITTORRENT_PASSWORD or "adminadmin"
+        }
+        
+        # Пробуем различные способы отправки данных для поддержки разных версий qBittorrent
+        
+        # Способ 1: Стандартный для большинства новых версий
+        headers = {'Content-Type': 'application/x-www-form-urlencoded'}
+        encoded_data = urllib.parse.urlencode(form_data)
+        
+        logger.debug(f"Попытка авторизации в qBittorrent (способ 1)")
+        login_response = session.post(
+            login_url, 
+            data=encoded_data,
+            headers=headers,
+            timeout=10
+        )
+        
+        if login_response.status_code == 200:
+            logger.debug("Авторизация в qBittorrent успешна (способ 1)")
+        else:
+            logger.debug(f"Авторизация не удалась (способ 1). Код: {login_response.status_code}")
+            
+            # Способ 2: Прямая передача данных формы
+            logger.debug(f"Попытка авторизации в qBittorrent (способ 2)")
+            login_response = session.post(
+                login_url,
+                data=form_data,
+                timeout=10
+            )
+            
+            if login_response.status_code != 200:
+                logger.debug(f"Авторизация не удалась (способ 2). Код: {login_response.status_code}")
+                
+                # Способ 3: Пробуем через другой путь API (для старых версий)
+                alt_login_url = f"{QBITTORRENT_URL}/login"
+                logger.debug(f"Попытка авторизации в qBittorrent (способ 3): {alt_login_url}")
+                login_response = session.post(
+                    alt_login_url,
+                    data=form_data,
+                    timeout=10
+                )
+                
+                if login_response.status_code != 200:
+                    logger.error("Все попытки авторизации не удались")
+                    return False
+                else:
+                    logger.debug("Авторизация в qBittorrent успешна (способ 3)")
+            else:
+                logger.debug("Авторизация в qBittorrent успешна (способ 2)")
+        
+        # Проверяем авторизацию, запросив информацию о клиенте
+        check_url = f"{QBITTORRENT_URL}/api/v2/app/version"
+        check_response = session.get(check_url, timeout=10)
+        
+        if check_response.status_code == 200:
+            logger.info(f"Авторизация в qBittorrent подтверждена, версия: {check_response.text}")
+            return True
+        else:
+            logger.error(f"Ошибка проверки авторизации в qBittorrent. Код: {check_response.status_code}")
+            return False
+            
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Не удалось подключиться к qBittorrent по адресу {QBITTORRENT_URL}")
+        return False
+    except requests.exceptions.Timeout:
+        logger.error("Таймаут подключения к qBittorrent")
+        return False
+    except Exception as e:
+        logger.error(f"Непредвиденная ошибка при авторизации в qBittorrent: {e}")
+        return False
 # Функция для проверки изменений на страницах
 def check_pages(rutracker_api, BOT, specific_url=None):
     """
