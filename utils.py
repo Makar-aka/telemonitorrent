@@ -5,18 +5,7 @@ from database import get_users, update_page_date, update_last_checked, get_pages
 
 # Функция для проверки доступа пользователя
 def check_user_access(update: Update, user_exists_func, add_user_func, get_users_func) -> bool:
-    """
-    Проверяет, имеет ли пользователь доступ к боту
-    
-    Args:
-        update: Объект Update из Telegram
-        user_exists_func: Функция для проверки существования пользователя
-        add_user_func: Функция для добавления пользователя
-        get_users_func: Функция для получения списка пользователей
-        
-    Returns:
-        bool: True если пользователь имеет доступ, False в противном случае
-    """
+   
     user_id = update.effective_user.id
     user_data = user_exists_func(user_id)
     
@@ -131,15 +120,15 @@ def send_notification_to_subscribers(bot, message, keyboard=None):
 # Функция для проверки изменений на страницах
 def check_pages(rutracker_api, BOT, specific_url=None):
     """
-    Проверяет страницы на наличие обновлений.
+    Проверяет все страницы (или конкретную страницу) на наличие обновлений
     
     Args:
-        rutracker_api: Экземпляр API RuTracker.
-        BOT: Экземпляр бота Telegram.
-        specific_url (str, optional): URL страницы для проверки. Если None, проверяются все страницы.
+        rutracker_api: Экземпляр API Rutracker
+        BOT: Экземпляр бота Telegram
+        specific_url: Конкретный URL для проверки (опционально)
         
     Returns:
-        bool: True, если найдены обновления, False в противном случае.
+        bool: True если найдены обновления, иначе False
     """
     logger.info("Начата проверка страниц на обновления")
     
@@ -154,7 +143,7 @@ def check_pages(rutracker_api, BOT, specific_url=None):
         updates_found = False
         
         for page in pages:
-            page_id, title, url, old_date, _ = page
+            page_id, title, url, old_date, last_checked = page
             
             # Если указан specific_url, пропускаем остальные страницы
             if specific_url and url != specific_url:
@@ -163,19 +152,55 @@ def check_pages(rutracker_api, BOT, specific_url=None):
             logger.debug(f"Проверка страницы: {title} (ID: {page_id})")
             
             try:
+                # Получаем содержимое страницы
                 page_content = rutracker_api.get_page_content(url)
                 if not page_content:
                     logger.error(f"Не удалось получить содержимое страницы {title} (ID: {page_id})")
                     continue
                 
+                # Получаем новую дату обновления
                 new_date = rutracker_api.parse_date(page_content)
+                
+                # Если дата обновления изменилась
                 if new_date and new_date != old_date:
                     updates_found = True
-                    # Обработка обновлений (например, скачивание торрента, уведомления)
-                    # ...
+                    logger.info(f"Обнаружено обновление страницы: {title} (ID: {page_id})")
+                    logger.info(f"Старая дата: {old_date}, Новая дата: {new_date}")
+                    
+                    # Обновляем дату в базе данных
+                    update_page_date(page_id, new_date)
+                    
+                    # Скачиваем торрент-файл
+                    file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+                    torrent_file_path = rutracker_api.download_torrent_by_url(url, file_path)
+                    
+                    if torrent_file_path:
+                        logger.info(f"Торрент-файл скачан и сохранен в {torrent_file_path}")
+                        
+                        # Отправляем торрент-файл в qBittorrent
+                        qbit_result = upload_to_qbittorrent(torrent_file_path)
+                        if qbit_result:
+                            logger.info(f"Торрент-файл для страницы {title} отправлен в qBittorrent")
+                        else:
+                            logger.warning(f"Не удалось отправить торрент-файл для страницы {title} в qBittorrent")
+                        
+                        # Отправляем уведомление подписчикам
+                        message = (
+                            f"<b>Обновление!</b>\n"
+                            f"Раздача: {title}\n"
+                            f"Дата обновления: {new_date}\n"
+                            f"<a href='{url}'>Ссылка на страницу</a>"
+                        )
+                        keyboard = [[
+                            InlineKeyboardButton("Открыть в браузере", url=url)
+                        ]]
+                        send_notification_to_subscribers(BOT, message, keyboard)
+                    else:
+                        logger.error(f"Не удалось скачать торрент-файл для {title} (ID: {page_id})")
             except Exception as e:
                 logger.error(f"Ошибка при проверке страницы {title} (ID: {page_id}): {e}")
             finally:
+                # Обновляем время последней проверки
                 update_last_checked(page_id)
         
         if not updates_found:
@@ -188,17 +213,7 @@ def check_pages(rutracker_api, BOT, specific_url=None):
 
 # Декораторы доступа
 def restricted(user_exists_func, add_user_func, get_users_func):
-    """
-    Декоратор для ограничения доступа к функциям бота
-    
-    Args:
-        user_exists_func: Функция для проверки существования пользователя
-        add_user_func: Функция для добавления пользователя
-        get_users_func: Функция для получения списка пользователей
-        
-    Returns:
-        Декоратор, который проверяет доступ пользователя
-    """
+   
     def decorator(func):
         def wrapped(update, context, *args, **kwargs):
             if not check_user_access(update, user_exists_func, add_user_func, get_users_func):
@@ -208,17 +223,7 @@ def restricted(user_exists_func, add_user_func, get_users_func):
     return decorator
 
 def admin_required(user_exists_func, add_user_func, get_users_func):
-    """
-    Декоратор для ограничения доступа к административным функциям бота
     
-    Args:
-        user_exists_func: Функция для проверки существования пользователя
-        add_user_func: Функция для добавления пользователя
-        get_users_func: Функция для получения списка пользователей
-        
-    Returns:
-        Декоратор, который проверяет права администратора
-    """
     def decorator(func):
         def wrapped(update, context, *args, **kwargs):
             if not check_user_access(update, user_exists_func, add_user_func, get_users_func):
@@ -228,3 +233,58 @@ def admin_required(user_exists_func, add_user_func, get_users_func):
             return func(update, context, *args, **kwargs)
         return wrapped
     return decorator
+
+def upload_to_qbittorrent(file_path):
+    
+    import requests
+    from config import (
+        QBITTORRENT_ENABLED, QBITTORRENT_URL, QBITTORRENT_USERNAME, 
+        QBITTORRENT_PASSWORD, QBITTORRENT_CATEGORY, QBITTORRENT_SAVE_PATH,
+        logger
+    )
+    
+    if not QBITTORRENT_ENABLED:
+        logger.debug("Загрузка в qBittorrent отключена в настройках")
+        return False
+    
+    try:
+        # Создаем сессию
+        session = requests.Session()
+        
+        # Авторизуемся
+        login_url = f"{QBITTORRENT_URL}/api/v2/auth/login"
+        login_data = {
+            "username": QBITTORRENT_USERNAME,
+            "password": QBITTORRENT_PASSWORD
+        }
+        login_response = session.post(login_url, data=login_data)
+        
+        if login_response.status_code != 200:
+            logger.error(f"Ошибка авторизации в qBittorrent: {login_response.status_code}")
+            return False
+            
+        # Загружаем торрент-файл
+        upload_url = f"{QBITTORRENT_URL}/api/v2/torrents/add"
+        
+        # Подготавливаем данные для загрузки
+        upload_data = {}
+        if QBITTORRENT_CATEGORY:
+            upload_data["category"] = QBITTORRENT_CATEGORY
+        if QBITTORRENT_SAVE_PATH:
+            upload_data["savepath"] = QBITTORRENT_SAVE_PATH
+            
+        # Открываем файл для отправки
+        with open(file_path, 'rb') as torrent_file:
+            files = {'torrents': torrent_file}
+            upload_response = session.post(upload_url, data=upload_data, files=files)
+        
+        if upload_response.status_code == 200:
+            logger.info(f"Торрент-файл {file_path} успешно добавлен в qBittorrent")
+            return True
+        else:
+            logger.error(f"Ошибка при загрузке торрента в qBittorrent: {upload_response.status_code}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Ошибка при отправке торрент-файла в qBittorrent: {e}")
+        return False

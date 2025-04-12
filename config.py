@@ -31,6 +31,14 @@ HTTP_PROXY = os.environ.get('HTTP_PROXY', '')
 HTTPS_PROXY = os.environ.get('HTTPS_PROXY', '')
 TIMEZONE = os.environ.get('TIMEZONE', 'UTC')
 
+# Настройки qBittorrent
+QBITTORRENT_ENABLED = os.environ.get('QBITTORRENT_ENABLED', 'false').lower() == 'true'
+QBITTORRENT_URL = os.environ.get('QBITTORRENT_URL')
+QBITTORRENT_USERNAME = os.environ.get('QBITTORRENT_USERNAME')
+QBITTORRENT_PASSWORD = os.environ.get('QBITTORRENT_PASSWORD')
+QBITTORRENT_CATEGORY = os.environ.get('QBITTORRENT_CATEGORY')
+QBITTORRENT_SAVE_PATH = os.environ.get('QBITTORRENT_SAVE_PATH', '')
+
 # Пути к базам данных SQLite
 DB_PATH = get_env_var('DB_PATH')
 USERS_DB_PATH = get_env_var('USERS_DB_PATH')

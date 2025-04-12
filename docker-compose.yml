@@ -1,0 +1,26 @@
+services:
+  bot:
+    build: https://github.com/Makar-aka/telemonitorrent.git
+    container_name: telemonitorrent
+    environment:
+      - BOT_TOKEN=${BOT_TOKEN}
+      - RUTRACKER_USERNAME=${RUTRACKER_USERNAME}
+      - RUTRACKER_PASSWORD=${RUTRACKER_PASSWORD}
+      - CHECK_INTERVAL=${CHECK_INTERVAL}
+      - FILE_DIR=${FILE_DIR}
+      - DB_PATH=${DB_PATH}
+      - USERS_DB_PATH=${USERS_DB_PATH}
+      - LOG_FILE=${LOG_FILE}
+      - LOG_LEVEL=${LOG_LEVEL}
+      - LOG_FORMAT=${LOG_FORMAT}
+      - USE_PROXY=${USE_PROXY}
+      - HTTP_PROXY=${HTTP_PROXY}
+      - HTTPS_PROXY=${HTTPS_PROXY}
+      - TZ=Europe/Moscow
+    volumes:
+      - ./files:/files
+      - ./users.db:/app/users.db
+      - ./database.db:/app/database.db
+      - ./bot.log:/app/bot.log
+    user: "1000:1000"
+    restart: always

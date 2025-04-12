@@ -167,8 +167,16 @@ def add_url(update: Update, context: CallbackContext) -> int:
             downloaded_file = rutracker_api.download_torrent_by_url(url, file_path)
             
             if downloaded_file:
-                update.message.reply_text(f"Торрент-файл успешно скачан: {downloaded_file}")
-                logger.info(f"Торрент-файл для страницы {title} скачан и сохранён в {downloaded_file}")
+                # Отправляем торрент-файл в qBittorrent
+                from utils import upload_to_qbittorrent
+                qbit_result = upload_to_qbittorrent(downloaded_file)
+                
+                if qbit_result:
+                    update.message.reply_text(f"Торрент-файл скачан и отправлен в qBittorrent: {os.path.basename(downloaded_file)}")
+                    logger.info(f"Торрент-файл для страницы {title} отправлен в qBittorrent")
+                else:
+                    update.message.reply_text(f"Торрент-файл скачан, но не отправлен в qBittorrent: {os.path.basename(downloaded_file)}")
+                    logger.warning(f"Не удалось отправить торрент-файл для страницы {title} в qBittorrent")
             else:
                 update.message.reply_text("Не удалось скачать торрент-файл.")
                 logger.error(f"Ошибка при скачивании торрент-файла для страницы {title}")
@@ -177,8 +185,6 @@ def add_url(update: Update, context: CallbackContext) -> int:
         update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
     
     return ConversationHandler.END
-
-
 
 @restricted_decorator
 def cancel_add(update: Update, context: CallbackContext) -> int:
