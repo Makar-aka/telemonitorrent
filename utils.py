@@ -165,12 +165,15 @@ def check_qbittorrent_auth():
         
         # Если мы дошли до этой точки без исключений, авторизация успешна
         # Проверим версию, чтобы убедиться, что соединение работает
-        version = qbt_client.app_version()
-        logger.info(f"Подключение к qBittorrent успешно. Версия: {version}")
-        
-        # Получим дополнительную информацию для логов
-        webapi_version = qbt_client.app_webapiVersion()
-        logger.info(f"Версия WebAPI qBittorrent: {webapi_version}")
+        # В библиотеке python-qbittorrent используется метод qb_api_version() вместо app_version()
+        try:
+            api_version = qbt_client.qbittorrent_version
+            logger.info(f"Подключение к qBittorrent успешно. Версия клиента: {api_version}")
+        except:
+            # Если атрибут qbittorrent_version не доступен, попробуем получить любую другую информацию
+            # для подтверждения соединения
+            torrents = qbt_client.torrents()
+            logger.info(f"Подключение к qBittorrent успешно. Текущее количество торрентов: {len(torrents)}")
         
         return True
         
@@ -238,19 +241,19 @@ def upload_to_qbittorrent(file_path):
         if QBITTORRENT_SAVE_PATH:
             options['savepath'] = QBITTORRENT_SAVE_PATH
             
-        # Добавляем дополнительные полезные опции
-        options['skip_checking'] = True  # Пропустить проверку данных при добавлении
-        
-        # Открываем файл и загружаем его
+        # Добавляем торрент
         with open(file_path, 'rb') as torrent_file:
-            # Используем метод из библиотеки для загрузки торрент-файла
-            qbt_client.download_from_file(torrent_file, **options)
+            torrent_data = torrent_file.read()
+            qbt_client.download_from_file(torrent_data, **options)
             
         logger.info(f"Торрент-файл {os.path.basename(file_path)} успешно добавлен в qBittorrent")
         
-        # Дополнительно можно вывести информацию о количестве текущих торрентов
-        torrents_count = len(qbt_client.torrents())
-        logger.debug(f"Всего торрентов в qBittorrent: {torrents_count}")
+        # Посчитаем количество торрентов (без вызова несуществующих методов)
+        try:
+            torrents_count = len(qbt_client.torrents())
+            logger.debug(f"Всего торрентов в qBittorrent: {torrents_count}")
+        except:
+            pass
         
         return True
         
@@ -263,6 +266,7 @@ def upload_to_qbittorrent(file_path):
             os.environ['HTTP_PROXY'] = original_http_proxy
         if original_https_proxy:
             os.environ['HTTPS_PROXY'] = original_https_proxy
+
 
 def get_qbittorrent_client():
     """
