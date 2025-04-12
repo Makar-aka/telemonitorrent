@@ -2,6 +2,8 @@ import os
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, Update
 from config import logger, NOTIFICATIONS_ENABLED, FILE_DIR
 from database import get_users, update_page_date, update_last_checked, get_pages
+from utils import check_pages, restricted, admin_required, upload_to_qbittorrent
+
 
 # Функция для проверки доступа пользователя
 def check_user_access(update: Update, user_exists_func, add_user_func, get_users_func) -> bool:

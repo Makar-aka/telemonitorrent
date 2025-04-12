@@ -1,12 +1,13 @@
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, ConversationHandler
-from config import logger, WAITING_URL, CHECK_INTERVAL
+from config import logger, WAITING_URL, CHECK_INTERVAL, FILE_DIR
 from database import (
     get_pages, get_page_by_id, update_page_url, add_page,
     user_exists, add_user, update_user_admin, update_user_sub, delete_user, get_users, delete_page,
     update_last_checked
 )
-from utils import check_pages, restricted, admin_required
+from utils import check_pages, restricted, admin_required, upload_to_qbittorrent
 
 # Определим глобальные переменные, которые будут заполнены в main.py
 rutracker_api = None
@@ -120,6 +121,24 @@ def add_with_arg(update: Update, context: CallbackContext) -> None:
                 reply_markup=ADD_MORE_KEYBOARD
             )
             logger.info(f"Команда /add выполнена пользователем {user_id} для страницы {title}")
+            
+            # Скачиваем торрент-файл
+            file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+            downloaded_file = rutracker_api.download_torrent_by_url(url, file_path)
+            
+            if downloaded_file:
+                # Отправляем торрент-файл в qBittorrent
+                qbit_result = upload_to_qbittorrent(downloaded_file)
+                
+                if qbit_result:
+                    update.message.reply_text(f"Торрент-файл скачан и отправлен в qBittorrent: {os.path.basename(downloaded_file)}")
+                    logger.info(f"Торрент-файл для страницы {title} отправлен в qBittorrent")
+                else:
+                    update.message.reply_text(f"Торрент-файл скачан, но не отправлен в qBittorrent: {os.path.basename(downloaded_file)}")
+                    logger.warning(f"Не удалось отправить торрент-файл для страницы {title} в qBittorrent")
+            else:
+                update.message.reply_text("Не удалось скачать торрент-файл.")
+                logger.error(f"Ошибка при скачивании торрент-файла для страницы {title}")
     except Exception as e:
         update.message.reply_text(f'Произошла ошибка при обработке ссылки: {str(e)}')
         logger.error(f"Ошибка при обработке ссылки от пользователя {user_id}: {e}")
@@ -168,7 +187,6 @@ def add_url(update: Update, context: CallbackContext) -> int:
             
             if downloaded_file:
                 # Отправляем торрент-файл в qBittorrent
-                from utils import upload_to_qbittorrent
                 qbit_result = upload_to_qbittorrent(downloaded_file)
                 
                 if qbit_result:
@@ -608,7 +626,7 @@ def button(update: Update, context: CallbackContext) -> None:
         logger.debug(f"Запрос информации о странице с ID {page_id} от пользователя {user_id}")
         page = get_page_by_id(page_id)
         if page:
-            _, _, url, date, last_checked = page
+            _, title, url, date, last_checked = page
             edit_date = rutracker_api.get_edit_date(url)
             keyboard = [
                 [InlineKeyboardButton("Назад к списку", callback_data="back_to_list"),
@@ -632,10 +650,31 @@ def button(update: Update, context: CallbackContext) -> None:
         logger.debug(f"Запрос на обновление страницы с ID {page_id} от пользователя {user_id}")
         page = get_page_by_id(page_id)
         if page:
-            _, _, url, _, _ = page
+            page_id, title, url, _, _ = page
             edit_date = rutracker_api.get_edit_date(url)
             update_last_checked(page_id)
-            query.edit_message_text(text=f'Дата: {edit_date}', reply_markup=BACK_TO_LIST_KEYBOARD)
+            
+            # Скачиваем торрент-файл
+            file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+            downloaded_file = rutracker_api.download_torrent_by_url(url, file_path)
+            
+            if downloaded_file:
+                # Отправляем торрент-файл в qBittorrent
+                qbit_result = upload_to_qbittorrent(downloaded_file)
+                
+                message = f'Дата: {edit_date}\n'
+                if qbit_result:
+                    message += 'Торрент-файл отправлен в qBittorrent'
+                    logger.info(f"Торрент-файл для страницы {title} отправлен в qBittorrent")
+                else:
+                    message += 'Не удалось отправить торрент-файл в qBittorrent'
+                    logger.warning(f"Не удалось отправить торрент-файл для страницы {title} в qBittorrent")
+                    
+                query.edit_message_text(text=message, reply_markup=BACK_TO_LIST_KEYBOARD)
+            else:
+                query.edit_message_text(text=f'Дата: {edit_date}\nНе удалось скачать торрент-файл', reply_markup=BACK_TO_LIST_KEYBOARD)
+                logger.error(f"Ошибка при скачивании торрент-файла для страницы {page_id}")
+            
             logger.info(f"Страница с ID {page_id} обновлена пользователем {user_id}, дата: {edit_date}")
 
 # Обработчик для текстовых сообщений
@@ -669,6 +708,24 @@ def handle_text(update: Update, context: CallbackContext) -> None:
                 )
                 logger.debug("Отправлено подтверждение добавления")
                 logger.info(f"Страница {title} добавлена для мониторинга через сообщение пользователем {user_id}")
+                
+                # Скачиваем торрент-файл
+                file_path = os.path.join(FILE_DIR, f"{page_id}.torrent")
+                downloaded_file = rutracker_api.download_torrent_by_url(url, file_path)
+                
+                if downloaded_file:
+                    # Отправляем торрент-файл в qBittorrent
+                    qbit_result = upload_to_qbittorrent(downloaded_file)
+                    
+                    if qbit_result:
+                        update.message.reply_text(f"Торрент-файл скачан и отправлен в qBittorrent: {os.path.basename(downloaded_file)}")
+                        logger.info(f"Торрент-файл для страницы {title} отправлен в qBittorrent")
+                    else:
+                        update.message.reply_text(f"Торрент-файл скачан, но не отправлен в qBittorrent: {os.path.basename(downloaded_file)}")
+                        logger.warning(f"Не удалось отправить торрент-файл для страницы {title} в qBittorrent")
+                else:
+                    update.message.reply_text("Не удалось скачать торрент-файл.")
+                    logger.error(f"Ошибка при скачивании торрент-файла для страницы {title}")
             
             context.bot_data[waiting_key] = False
             logger.debug(f"Сброшен флаг ожидания URL для чата {chat_id}")
@@ -684,4 +741,3 @@ def set_dependencies(api, bot):
     rutracker_api = api
     BOT = bot
     logger.debug("Установлены внешние зависимости (rutracker_api и BOT)")
-
