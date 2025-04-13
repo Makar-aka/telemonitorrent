@@ -1,26 +1,24 @@
 # Используем официальный образ Python
 FROM python:3.9-slim
 
-# Создаём группу и пользователя
+# Создаём группу и пользователя для безопасного выполнения
 RUN groupadd -g 1000 appgroup && \
     useradd -m -u 1000 -g appgroup appuser
 
 # Устанавливаем рабочую директорию
 WORKDIR /app
 
-# Создаём директорию files с правильными правами
-RUN mkdir -p /app/files && \
-    chown -R appuser:appgroup /app/files
-
-RUN touch /app/database.db /app/users.db && \
-    chmod 666 /app/database.db /app/users.db && \
-    chown appuser:appgroup /app/database.db /app/users.db
-
-# Копируем файлы проекта
+# Копируем файлы проекта в контейнер
 COPY . /app
 
 # Устанавливаем зависимости
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Создаём необходимые файлы и директории с правильными правами
+RUN mkdir -p /app/files && \
+    touch /app/database.db /app/users.db /app/bot.log && \
+    chmod 666 /app/database.db /app/users.db /app/bot.log && \
+    chown -R appuser:appgroup /app
 
 # Переключаемся на пользователя appuser
 USER appuser
